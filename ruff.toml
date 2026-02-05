@@ -59,6 +59,9 @@ known-first-party = ["yt_dbl"]
 "src/yt_dbl/models/manager.py" = [
     "PLC0415", # lazy import of optional torch
 ]
+"src/yt_dbl/pipeline/separate.py" = [
+    "PLC0415", # lazy import of audio_separator + torch
+]
 "tests/**" = [
     "T20",     # prints OK in tests
     "S",       # security checks irrelevant in tests

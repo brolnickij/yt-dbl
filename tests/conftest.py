@@ -106,6 +106,21 @@ def prefill_download(state: PipelineState, cfg: Settings) -> PipelineState:
     return state
 
 
+def prefill_separate(state: PipelineState, cfg: Settings) -> PipelineState:
+    """Utility: populate separate step so transcribe+ steps can run.
+
+    Call after prefill_download when tests need post-separation state.
+    """
+    step = state.get_step(StepName.SEPARATE)
+    step.status = StepStatus.COMPLETED
+    step.outputs = {"vocals": "vocals.wav", "background": "background.wav"}
+
+    step_dir = cfg.step_dir(state.video_id, "02_separate")
+    (step_dir / "vocals.wav").write_bytes(b"fake-vocals")
+    (step_dir / "background.wav").write_bytes(b"fake-background")
+    return state
+
+
 # ── E2E fixtures (only used when --run-slow) ───────────────────────────────
 
 # Shared cache so the same video is not re-downloaded across E2E tests inside

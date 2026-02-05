@@ -2,12 +2,23 @@
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from tests.conftest import prefill_download
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.runner import PipelineRunner, load_state, save_state
 from yt_dbl.schemas import PipelineState, StepName, StepStatus
+
+
+def _fake_separation_factory(sep_dir: Path) -> Any:
+    """Return a side_effect callable that creates fake separation outputs."""
+
+    def _fake(audio_path: Path) -> None:
+        (sep_dir / "vocals.wav").write_bytes(b"fake-vocals")
+        (sep_dir / "background.wav").write_bytes(b"fake-background")
+
+    return _fake
 
 
 class TestCheckpoints:
@@ -48,8 +59,14 @@ class TestPipelineRunner:
         state = prefill_download(state, cfg)
         save_state(state, cfg)
 
+        sep_dir = cfg.step_dir("test123", "02_separate")
+
         runner = PipelineRunner(cfg)
-        state = runner.run(state)
+        with patch(
+            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+            side_effect=_fake_separation_factory(sep_dir),
+        ):
+            state = runner.run(state)
 
         assert state.next_step is None
         for step_name in [
@@ -66,8 +83,14 @@ class TestPipelineRunner:
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
+        sep_dir = cfg.step_dir("test123", "02_separate")
+
         runner = PipelineRunner(cfg)
-        state = runner.run(state)
+        with patch(
+            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+            side_effect=_fake_separation_factory(sep_dir),
+        ):
+            state = runner.run(state)
 
         # Mark last 3 as pending again
         for name in [StepName.TRANSLATE, StepName.SYNTHESIZE, StepName.ASSEMBLE]:
@@ -83,10 +106,16 @@ class TestPipelineRunner:
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
-        runner = PipelineRunner(cfg)
-        state = runner.run(state)
+        sep_dir = cfg.step_dir("test123", "02_separate")
 
-        state = runner.run(state, from_step=StepName.TRANSLATE)
+        runner = PipelineRunner(cfg)
+        with patch(
+            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+            side_effect=_fake_separation_factory(sep_dir),
+        ):
+            state = runner.run(state)
+            state = runner.run(state, from_step=StepName.TRANSLATE)
+
         assert state.get_step(StepName.TRANSLATE).status == StepStatus.COMPLETED
 
     def test_step_failure_stops_pipeline(self, tmp_path: Path) -> None:
@@ -115,8 +144,14 @@ class TestPipelineRunner:
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
+        sep_dir = cfg.step_dir("test123", "02_separate")
+
         runner = PipelineRunner(cfg)
-        state = runner.run(state)
+        with patch(
+            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+            side_effect=_fake_separation_factory(sep_dir),
+        ):
+            state = runner.run(state)
 
         loaded = load_state(cfg, "test123")
         assert loaded is not None
@@ -147,8 +182,14 @@ class TestPipelineRunner:
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
+        sep_dir = cfg.step_dir("test123", "02_separate")
+
         runner = PipelineRunner(cfg)
-        state = runner.run(state)
+        with patch(
+            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+            side_effect=_fake_separation_factory(sep_dir),
+        ):
+            state = runner.run(state)
 
         result = state.get_step(StepName.SEPARATE)
         assert result.started_at != ""

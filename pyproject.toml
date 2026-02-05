@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.12",
     "pydantic-settings>=2.12",
     "yt-dlp>=2026.0",
+    "audio-separator[cpu]>=0.41",
 ]
 
 [dependency-groups]

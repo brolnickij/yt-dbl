@@ -42,11 +42,19 @@ class Settings(BaseSettings):
     voice_ref_duration: float = Field(default=7.0, ge=3.0, le=30.0)
     sample_rate: int = 48000
 
+    # ── Separation ──────────────────────────────────────────────────────────
+    separation_model: str = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+    separation_segment_size: int = Field(default=256, ge=64, le=512)
+    separation_overlap: int = Field(default=8, ge=2, le=50)
+
     # ── Models ──────────────────────────────────────────────────────────────
     max_loaded_models: int = Field(default=1, ge=1)
 
     # ── Paths ───────────────────────────────────────────────────────────────
     work_dir: Path = Path("work")
+    model_cache_dir: Path = Field(
+        default_factory=lambda: Path.home() / ".cache" / "yt-dbl" / "models",
+    )
 
     # ── Translation ─────────────────────────────────────────────────────────
     translation_batch_size: int = Field(default=20, ge=1)
