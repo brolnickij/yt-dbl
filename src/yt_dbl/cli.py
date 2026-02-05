@@ -222,7 +222,7 @@ def models_download() -> None:
 def _version_callback(value: bool) -> None:
     if value:
         console.print(f"yt-dbl {__version__}")
-        raise typer.Exit()
+        raise typer.Exit
 
 
 @app.callback()
