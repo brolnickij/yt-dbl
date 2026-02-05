@@ -1,5 +1,7 @@
 """Tests for yt_dbl.models.manager — LRU model management."""
 
+import pytest
+
 from yt_dbl.models.manager import ModelManager
 
 
@@ -59,11 +61,8 @@ class TestModelManager:
 
     def test_unknown_model_raises(self) -> None:
         mgr = ModelManager(max_loaded=1)
-        try:
+        with pytest.raises(KeyError):
             mgr.get("nonexistent")
-            raise AssertionError("Should have raised KeyError")
-        except KeyError:
-            pass
 
     def test_cached_hit_no_reload(self) -> None:
         call_count = 0
@@ -79,3 +78,29 @@ class TestModelManager:
         mgr.get("m")
         mgr.get("m")
         assert call_count == 1
+
+    def test_unload_nonexistent_is_safe(self) -> None:
+        """Unloading a model that isn't loaded should not crash."""
+        mgr = ModelManager(max_loaded=2)
+        mgr.register("a", loader=lambda: "a")
+        mgr.unload("a")  # not loaded yet — should be a no-op
+
+    def test_eviction_calls_unloader(self) -> None:
+        """When LRU evicts a model, the unloader callback fires."""
+        unloaded: list[str] = []
+        mgr = ModelManager(max_loaded=1)
+        mgr.register("a", loader=lambda: "val_a", unloader=lambda m: unloaded.append(m))
+        mgr.register("b", loader=lambda: "val_b")
+
+        mgr.get("a")
+        mgr.get("b")  # triggers eviction of 'a'
+        assert "val_a" in unloaded
+
+    def test_re_register_overwrites(self) -> None:
+        """Re-registering a name should update the loader."""
+        mgr = ModelManager(max_loaded=2)
+        mgr.register("m", loader=lambda: "v1")
+        assert mgr.get("m") == "v1"
+        mgr.unload("m")
+        mgr.register("m", loader=lambda: "v2")
+        assert mgr.get("m") == "v2"
