@@ -7,6 +7,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+__all__ = ["Settings", "settings"]
+
 
 class Settings(BaseSettings):
     """All configurable parameters for yt-dbl.
