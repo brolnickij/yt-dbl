@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Strip ANSI escape codes so assertions survive Rich markup."""
+    return _ANSI_RE.sub("", text)
 
 
 class TestCLI:
@@ -32,8 +40,9 @@ class TestCLI:
     def test_dub_help(self) -> None:
         result = runner.invoke(app, ["dub", "--help"])
         assert result.exit_code == 0
-        assert "--target-language" in result.output
-        assert "--from-step" in result.output
+        output = _plain(result.output)
+        assert "--target-language" in output
+        assert "--from-step" in output
 
     def test_resume_nonexistent(self) -> None:
         result = runner.invoke(app, ["resume", "nonexistent_video_id_xyz"])
