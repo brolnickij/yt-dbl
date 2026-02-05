@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     separation_model: str = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
     separation_segment_size: int = Field(default=256, ge=64, le=512)
     separation_overlap: int = Field(default=8, ge=2, le=50)
+    separation_batch_size: int = Field(default=1, ge=1, le=16)
 
     # ── Models ──────────────────────────────────────────────────────────────
     max_loaded_models: int = Field(default=1, ge=1)

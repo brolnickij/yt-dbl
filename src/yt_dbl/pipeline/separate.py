@@ -97,7 +97,7 @@ class SeparateStep(PipelineStep):
             mdxc_params={
                 "segment_size": self.settings.separation_segment_size,
                 "overlap": self.settings.separation_overlap,
-                "batch_size": 1,
+                "batch_size": self.settings.separation_batch_size,
             },
         )
 
