@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 .ruff_cache/
 .pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
 dist/
 *.egg-info/
 work/
