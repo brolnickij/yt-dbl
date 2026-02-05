@@ -1,7 +1,7 @@
-"""E2E test: full pipeline run — real download, stub processing steps.
+"""E2E test: full pipeline run — real download + real separation, stub steps 3-6.
 
 Verifies that PipelineRunner drives all steps end-to-end:
-  download (real) → separate (stub) → transcribe (stub) →
+  download (real) → separate (real) → transcribe (stub) →
   translate (stub) → synthesize (stub) → assemble (stub)
 
 Skipped by default; run with ``pytest --run-slow``.
@@ -26,16 +26,22 @@ pytestmark = pytest.mark.slow
 
 
 @pytest.fixture
-def _require_tools(ytdlp_available: bool, ffmpeg_available: bool) -> None:
+def _require_tools(
+    ytdlp_available: bool,
+    ffmpeg_available: bool,
+    audio_separator_available: bool,
+) -> None:
     if not ytdlp_available:
         pytest.skip("yt-dlp not installed")
     if not ffmpeg_available:
         pytest.skip("ffmpeg not installed")
+    if not audio_separator_available:
+        pytest.skip("audio-separator not installed")
 
 
 @pytest.mark.usefixtures("_require_tools")
 class TestE2EPipeline:
-    """Full pipeline traversal with real download + stub steps 2-6."""
+    """Full pipeline traversal with real download + separation, stub steps 3-6."""
 
     def test_full_pipeline_run(self, e2e_work_dir: Path) -> None:
         """Run entire pipeline on a real short video."""

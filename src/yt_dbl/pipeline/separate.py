@@ -132,6 +132,9 @@ class SeparateStep(PipelineStep):
 
         for filepath_str in output_files:
             filepath = Path(filepath_str)
+            # audio-separator may return relative paths — resolve against step_dir
+            if not filepath.is_absolute():
+                filepath = self.step_dir / filepath
             if not filepath.exists():
                 log_warning(f"Expected output file not found: {filepath}")
                 continue

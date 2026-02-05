@@ -197,6 +197,20 @@ class TestRenameOutputs:
         with pytest.raises(SeparationError, match="No instrumental stem"):
             step._rename_outputs([str(vocals), nonexistent])
 
+    def test_handles_relative_paths(self, tmp_path: Path) -> None:
+        """audio-separator may return just filenames — resolve against step_dir."""
+        step = self._make_step(tmp_path)
+        vocals = step.step_dir / "audio_(Vocals)_model.wav"
+        instr = step.step_dir / "audio_(Instrumental)_model.wav"
+        vocals.write_bytes(b"v")
+        instr.write_bytes(b"i")
+
+        # Pass only filenames (relative), not absolute paths
+        step._rename_outputs(["audio_(Vocals)_model.wav", "audio_(Instrumental)_model.wav"])
+
+        assert (step.step_dir / "vocals.wav").exists()
+        assert (step.step_dir / "background.wav").exists()
+
 
 class TestSeparationConfig:
     def test_default_model(self) -> None:

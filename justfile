@@ -42,9 +42,10 @@ test:
 test-v:
     uv run pytest tests/ --cov --cov-report=term-missing
 
-# Run E2E tests (requires network + ffmpeg)
+# Run E2E tests (requires network + ffmpeg + audio-separator)
+# -n0 prevents xdist parallelism to avoid concurrent model downloads
 test-e2e:
-    uv run pytest tests/e2e/ --run-slow --timeout=120 -v
+    uv run pytest tests/e2e/ --run-slow --timeout=300 -n0 -v
 
 # Run all tests including E2E
 test-all: test test-e2e

@@ -162,3 +162,14 @@ def ffmpeg_available() -> bool:
 def ytdlp_available() -> bool:
     """Check if yt-dlp is available on this machine."""
     return shutil.which("yt-dlp") is not None
+
+
+@pytest.fixture(scope="session")
+def audio_separator_available() -> bool:
+    """Check if audio-separator is importable."""
+    try:
+        import audio_separator.separator  # noqa: F401
+
+        return True  # noqa: TRY300
+    except ImportError:
+        return False
