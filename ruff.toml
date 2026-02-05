@@ -1,0 +1,67 @@
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+    "RUF",   # ruff-specific
+    "PT",    # flake8-pytest-style
+    "RET",   # flake8-return
+    "PIE",   # flake8-pie
+    "T20",   # flake8-print (catch stray prints)
+    "C4",    # flake8-comprehensions
+    "A",     # flake8-builtins (shadow builtins)
+    "PTH",   # flake8-use-pathlib
+    "PERF",  # perflint (performance)
+    "PLC",   # pylint convention
+    "PLE",   # pylint error
+    "PLW",   # pylint warning
+    "PLR",   # pylint refactor
+    "TRY",   # tryceratops (exception best practices)
+    "FLY",   # flynt (f-string conversion)
+    "FURB",  # refurb (modern Python)
+    "LOG",   # flake8-logging
+    "S",     # flake8-bandit (security)
+    "DTZ",   # flake8-datetimez
+    "RSE",   # flake8-raise
+    "ICN",   # flake8-import-conventions
+    "G",     # flake8-logging-format
+    "INP",   # flake8-no-pep420
+    "ERA",   # eradicate (commented-out code)
+    "FBT",   # flake8-boolean-trap
+]
+ignore = [
+    "T201",    # allow print in CLI code
+    "TRY003",  # long messages in exceptions OK for CLI
+    "S603",    # subprocess calls OK — core tool functionality
+    "S607",    # partial executable path OK for ffmpeg/yt-dlp
+    "PLR0913", # many arguments OK for CLI commands
+    "FBT001",  # boolean positional in function def OK
+    "FBT002",  # boolean default in function def OK
+]
+
+[lint.isort]
+known-first-party = ["yt_dbl"]
+
+[lint.per-file-ignores]
+"src/yt_dbl/cli.py" = [
+    "PLC0415", # lazy imports for fast CLI startup
+]
+"tests/**" = [
+    "T20",     # prints OK in tests
+    "S",       # security checks irrelevant in tests
+    "PLR2004", # magic values OK in test assertions
+    "DTZ",     # timezone-naive OK in tests
+    "PLC0415", # local imports OK in tests
+    "PLW0603", # global statement OK in test conftest
+    "PLW0108", # lambda wrappers OK in test helpers
+]

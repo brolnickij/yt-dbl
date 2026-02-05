@@ -11,6 +11,7 @@ dependencies = [
     "rich>=13.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
+    "yt-dlp>=2024.0",
 ]
 
 [dependency-groups]
@@ -19,6 +20,9 @@ dev = [
     "mypy>=1.14",
     "pytest>=8.0",
     "pytest-cov>=6.0",
+    "pytest-randomly>=3.16",
+    "pytest-xdist>=3.5",
+    "pytest-timeout>=2.3",
     "pre-commit>=4.0",
 ]
 
@@ -31,95 +35,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/yt_dbl"]
-
-# ── Ruff ────────────────────────────────────────────────────────────────────
-
-[tool.ruff]
-target-version = "py311"
-line-length = 100
-src = ["src"]
-
-[tool.ruff.lint]
-select = [
-    "E",     # pycodestyle errors
-    "W",     # pycodestyle warnings
-    "F",     # pyflakes
-    "I",     # isort
-    "N",     # pep8-naming
-    "UP",    # pyupgrade
-    "B",     # flake8-bugbear
-    "SIM",   # flake8-simplify
-    "TCH",   # flake8-type-checking
-    "RUF",   # ruff-specific
-    "PT",    # flake8-pytest-style
-    "RET",   # flake8-return
-    "PIE",   # flake8-pie
-    "T20",   # flake8-print (catch stray prints)
-]
-ignore = [
-    "T201",  # allow print in CLI code
-]
-
-[tool.ruff.lint.isort]
-known-first-party = ["yt_dbl"]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["T20"]
-
-# ── Mypy ────────────────────────────────────────────────────────────────────
-
-[tool.mypy]
-python_version = "3.11"
-mypy_path = "src"
-packages = ["yt_dbl"]
-strict = true
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-
-[[tool.mypy.overrides]]
-module = [
-    "audio_separator.*",
-    "mlx_audio.*",
-    "pyannote.*",
-    "funasr.*",
-    "librosa.*",
-    "torch.*",
-]
-ignore_missing_imports = true
-
-# ── Pytest ──────────────────────────────────────────────────────────────────
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
-addopts = [
-    "-v",
-    "--tb=short",
-    "--strict-markers",
-    "--strict-config",
-    "-x",
-]
-markers = [
-    "slow: marks tests as slow (skipped by default, run with --run-slow)",
-]
-
-[tool.coverage.run]
-source = ["yt_dbl"]
-branch = true
-
-[tool.coverage.report]
-show_missing = true
-skip_empty = true
-exclude_lines = [
-    "pragma: no cover",
-    "if TYPE_CHECKING:",
-    "if __name__",
-    "@overload",
-    "\\.\\.\\.",
-]

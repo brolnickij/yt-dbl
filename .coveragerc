@@ -1,0 +1,14 @@
+[run]
+source = yt_dbl
+branch = true
+
+[report]
+show_missing = true
+skip_empty = true
+fail_under = 80
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if __name__
+    @overload
+    \.\.\.
