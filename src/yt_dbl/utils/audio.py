@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+__all__ = ["extract_audio", "get_audio_duration", "replace_audio", "run_ffmpeg"]
+
 
 def run_ffmpeg(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run an ffmpeg command and return the result."""
@@ -42,32 +44,19 @@ def replace_audio(
         str(video_path),
         "-i",
         str(audio_path),
-        "-c:v",
-        "copy",
         "-map",
         "0:v:0",
         "-map",
         "1:a:0",
+        "-c:a",
+        "aac",
     ]
     if subtitle_path:
-        args += ["-vf", f"subtitles={subtitle_path}"]
         # Need to re-encode video when burning subtitles
-        args = [
-            "-i",
-            str(video_path),
-            "-i",
-            str(audio_path),
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-c:a",
-            "aac",
-            "-vf",
-            f"subtitles={subtitle_path}",
-        ]
+        args += ["-vf", f"subtitles={subtitle_path}"]
     else:
-        args += ["-c:a", "aac"]
+        # No subtitles — copy video stream as-is
+        args += ["-c:v", "copy"]
     args.append(str(output_path))
     run_ffmpeg(args)
     return output_path
