@@ -27,3 +27,21 @@ repos:
       - id: check-json
       - id: check-merge-conflict
       - id: debug-statements
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - feat
+          - fix
+          - refactor
+          - style
+          - build
+          - ci
+          - docs
+          - test
+          - perf
+          - chore
+          - revert
