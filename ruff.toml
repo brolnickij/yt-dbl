@@ -56,6 +56,9 @@ known-first-party = ["yt_dbl"]
 "src/yt_dbl/cli.py" = [
     "PLC0415", # lazy imports for fast CLI startup
 ]
+"src/yt_dbl/models/manager.py" = [
+    "PLC0415", # lazy import of optional torch
+]
 "tests/**" = [
     "T20",     # prints OK in tests
     "S",       # security checks irrelevant in tests
