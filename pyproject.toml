@@ -63,3 +63,13 @@ packages = ["src/yt_dbl"]
 
 [tool.uv]
 prerelease = "allow"
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/yt_dbl/__init__.py:__version__"]
+branch = "master"
+build_command = "uv build"
+commit_author = "github-actions <actions@github.com>"
+commit_message = "chore(release): {version}"
+tag_format = "v{version}"
+upload_to_vcs_release = true
