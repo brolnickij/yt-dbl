@@ -1,7 +1,7 @@
-"""E2E test: full pipeline run — real download + real separation, stub steps 3-6.
+"""E2E test: full pipeline run — real download + separation + transcription, stub steps 4-6.
 
 Verifies that PipelineRunner drives all steps end-to-end:
-  download (real) → separate (real) → transcribe (stub) →
+  download (real) → separate (real) → transcribe (real) →
   translate (stub) → synthesize (stub) → assemble (stub)
 
 Skipped by default; run with ``pytest --run-slow``.
