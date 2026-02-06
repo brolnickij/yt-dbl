@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v1.4.1 (2026-02-06)
+
+### Bug Fixes
+
+- Apply --target-language override to existing jobs instead of silently ignoring it
+  ([`03dfeec`](https://github.com/brolnickij/yt-dbl/commit/03dfeeca1eb708321ecc5d7acaead85dc3863691))
+
+- Use atomic write for state.json to prevent corruption on crash
+  ([`9b06ae0`](https://github.com/brolnickij/yt-dbl/commit/9b06ae0e615c97b04f54a1985e853f71d5cf232f))
+
+- **download**: Kill yt-dlp subprocess on exception to prevent zombies
+  ([`ca5bc88`](https://github.com/brolnickij/yt-dbl/commit/ca5bc88f8d70420b737171b4e5e9ce56eed029ed))
+
+- **runner**: Unload models on KeyboardInterrupt via try/finally
+  ([`2e374a2`](https://github.com/brolnickij/yt-dbl/commit/2e374a270b5be9ec29da43d31c2f95ec722fc09b))
+
+- **transcribe**: Persist source_language in segments.json
+  ([`188a9c8`](https://github.com/brolnickij/yt-dbl/commit/188a9c81672123bf4f045c4a219f031c21b9e6b2))
+
+### Documentation
+
+- Init AGENTS.md
+  ([`8a79ddd`](https://github.com/brolnickij/yt-dbl/commit/8a79dddbecabffaeb49bbf94f1ac45e6af0828aa))
+
+
 ## v1.4.0 (2026-02-06)
 
 ### Bug Fixes
