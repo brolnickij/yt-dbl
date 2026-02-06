@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from yt_dbl.cli import _extract_video_id, _step_name_from_str, app
-from yt_dbl.schemas import PipelineState, StepName, StepStatus
+from yt_dbl.cli import _extract_video_id, _invalidate_language_steps, _step_name_from_str, app
+from yt_dbl.schemas import STEP_DIRS, PipelineState, StepName, StepStatus
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -238,3 +238,177 @@ class TestStatusCommand:
         assert "completed" in result.output.lower()
         assert "failed" in result.output.lower()
         assert "Test Title" in result.output
+
+
+class TestInvalidateLanguageSteps:
+    """Unit tests for _invalidate_language_steps helper."""
+
+    def test_resets_completed_steps(self, tmp_path: Path) -> None:
+        """Completed translate/synthesize/assemble steps are reset to PENDING."""
+        from yt_dbl.config import Settings
+
+        cfg = Settings(work_dir=tmp_path)
+        state = PipelineState(video_id="vid1", target_language="en")
+        for step in (StepName.TRANSLATE, StepName.SYNTHESIZE, StepName.ASSEMBLE):
+            r = state.get_step(step)
+            r.status = StepStatus.COMPLETED
+            r.outputs = {"key": "value"}
+            r.duration_sec = 10.0
+            r.error = "old error"
+
+        _invalidate_language_steps(state, cfg, "vid1")
+
+        for step in (StepName.TRANSLATE, StepName.SYNTHESIZE, StepName.ASSEMBLE):
+            r = state.get_step(step)
+            assert r.status == StepStatus.PENDING
+            assert r.outputs == {}
+            assert r.duration_sec == 0.0
+            assert r.error == ""
+
+    def test_removes_cached_step_dirs(self, tmp_path: Path) -> None:
+        """Cached step directories are deleted."""
+        from yt_dbl.config import Settings
+
+        cfg = Settings(work_dir=tmp_path)
+        state = PipelineState(video_id="vid1")
+
+        # Create step directories with dummy files
+        for step in (StepName.TRANSLATE, StepName.SYNTHESIZE, StepName.ASSEMBLE):
+            d = tmp_path / "vid1" / STEP_DIRS[step]
+            d.mkdir(parents=True)
+            (d / "dummy.json").write_text("{}")
+
+        _invalidate_language_steps(state, cfg, "vid1")
+
+        for step in (StepName.TRANSLATE, StepName.SYNTHESIZE, StepName.ASSEMBLE):
+            assert not (tmp_path / "vid1" / STEP_DIRS[step]).exists()
+
+    def test_removes_result_files(self, tmp_path: Path) -> None:
+        """Result mp4/mkv files are deleted from job root."""
+        from yt_dbl.config import Settings
+
+        cfg = Settings(work_dir=tmp_path)
+        state = PipelineState(video_id="vid1")
+        job_dir = tmp_path / "vid1"
+        job_dir.mkdir(parents=True)
+        (job_dir / "result.mp4").write_text("fake")
+        (job_dir / "result.mkv").write_text("fake")
+
+        _invalidate_language_steps(state, cfg, "vid1")
+
+        assert not (job_dir / "result.mp4").exists()
+        assert not (job_dir / "result.mkv").exists()
+
+    def test_leaves_earlier_steps_untouched(self, tmp_path: Path) -> None:
+        """Download / separate / transcribe steps are NOT affected."""
+        from yt_dbl.config import Settings
+
+        cfg = Settings(work_dir=tmp_path)
+        state = PipelineState(video_id="vid1")
+        for step in (StepName.DOWNLOAD, StepName.SEPARATE, StepName.TRANSCRIBE):
+            r = state.get_step(step)
+            r.status = StepStatus.COMPLETED
+            r.outputs = {"key": "value"}
+
+        _invalidate_language_steps(state, cfg, "vid1")
+
+        for step in (StepName.DOWNLOAD, StepName.SEPARATE, StepName.TRANSCRIBE):
+            r = state.get_step(step)
+            assert r.status == StepStatus.COMPLETED
+            assert r.outputs == {"key": "value"}
+
+
+class TestDubLanguageOverride:
+    """Integration tests for --target-language override on existing jobs."""
+
+    @patch("yt_dbl.pipeline.runner.PipelineRunner")
+    @patch("yt_dbl.pipeline.runner.save_state")
+    @patch("yt_dbl.pipeline.runner.load_state")
+    def test_language_override_updates_state(
+        self,
+        mock_load: MagicMock,
+        mock_save: MagicMock,
+        mock_runner_cls: MagicMock,
+    ) -> None:
+        """Passing --target-language on existing job updates state."""
+        existing = PipelineState(
+            video_id="dQw4w9WgXcQ",
+            url="https://youtube.com/watch?v=dQw4w9WgXcQ",
+            target_language="ru",
+        )
+        existing.get_step(StepName.TRANSLATE).status = StepStatus.COMPLETED
+        mock_load.return_value = existing
+
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+
+        result = runner.invoke(
+            app,
+            ["dub", "https://youtube.com/watch?v=dQw4w9WgXcQ", "-t", "fr"],
+        )
+
+        assert result.exit_code == 0
+        # State should have been saved with new language
+        mock_save.assert_called_once()
+        saved_state = mock_save.call_args[0][0]
+        assert saved_state.target_language == "fr"
+        # Translate step should be invalidated
+        assert saved_state.get_step(StepName.TRANSLATE).status == StepStatus.PENDING
+
+    @patch("yt_dbl.pipeline.runner.PipelineRunner")
+    @patch("yt_dbl.pipeline.runner.save_state")
+    @patch("yt_dbl.pipeline.runner.load_state")
+    def test_same_language_no_override(
+        self,
+        mock_load: MagicMock,
+        mock_save: MagicMock,
+        mock_runner_cls: MagicMock,
+    ) -> None:
+        """Passing same --target-language does not trigger invalidation."""
+        existing = PipelineState(
+            video_id="dQw4w9WgXcQ",
+            url="https://youtube.com/watch?v=dQw4w9WgXcQ",
+            target_language="ru",
+        )
+        existing.get_step(StepName.TRANSLATE).status = StepStatus.COMPLETED
+        mock_load.return_value = existing
+
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+
+        result = runner.invoke(
+            app,
+            ["dub", "https://youtube.com/watch?v=dQw4w9WgXcQ", "-t", "ru"],
+        )
+
+        assert result.exit_code == 0
+        mock_save.assert_not_called()
+
+    @patch("yt_dbl.pipeline.runner.PipelineRunner")
+    @patch("yt_dbl.pipeline.runner.save_state")
+    @patch("yt_dbl.pipeline.runner.load_state")
+    def test_no_language_flag_no_override(
+        self,
+        mock_load: MagicMock,
+        mock_save: MagicMock,
+        mock_runner_cls: MagicMock,
+    ) -> None:
+        """Omitting --target-language preserves saved state."""
+        existing = PipelineState(
+            video_id="dQw4w9WgXcQ",
+            url="https://youtube.com/watch?v=dQw4w9WgXcQ",
+            target_language="fr",
+        )
+        mock_load.return_value = existing
+
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+
+        result = runner.invoke(
+            app,
+            ["dub", "https://youtube.com/watch?v=dQw4w9WgXcQ"],
+        )
+
+        assert result.exit_code == 0
+        mock_save.assert_not_called()
+        assert existing.target_language == "fr"

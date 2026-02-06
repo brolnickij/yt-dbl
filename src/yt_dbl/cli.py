@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 from typing import Annotated
 
@@ -11,8 +12,8 @@ from rich.table import Table
 
 from yt_dbl import __version__
 from yt_dbl.config import Settings
-from yt_dbl.schemas import STEP_ORDER, PipelineState, StepName, StepStatus
-from yt_dbl.utils.logging import console
+from yt_dbl.schemas import STEP_DIRS, STEP_ORDER, PipelineState, StepName, StepStatus
+from yt_dbl.utils.logging import console, log_warning
 
 _OutputDir = Annotated[
     Path | None,
@@ -61,6 +62,30 @@ def _step_name_from_str(step_str: str) -> StepName:
     except ValueError as err:
         valid = ", ".join(s.value for s in StepName)
         raise typer.BadParameter(f"Unknown step '{step_str}'. Valid: {valid}") from err
+
+
+def _invalidate_language_steps(
+    state: PipelineState,
+    cfg: Settings,
+    video_id: str,
+) -> None:
+    """Reset language-dependent steps and remove their cached outputs."""
+    for step_name in (StepName.TRANSLATE, StepName.SYNTHESIZE, StepName.ASSEMBLE):
+        step_result = state.steps.get(step_name)
+        if step_result:
+            step_result.status = StepStatus.PENDING
+            step_result.outputs.clear()
+            step_result.error = ""
+            step_result.duration_sec = 0.0
+        step_dir = cfg.work_dir / video_id / STEP_DIRS[step_name]
+        if step_dir.exists():
+            shutil.rmtree(step_dir)
+    # Remove result files from job root
+    job_dir = cfg.work_dir / video_id
+    for ext in ("mp4", "mkv"):
+        result_file = job_dir / f"result.{ext}"
+        if result_file.exists():
+            result_file.unlink()
 
 
 # ── Commands ────────────────────────────────────────────────────────────────
@@ -117,6 +142,11 @@ def dub(
             url=url,
             target_language=cfg.target_language,
         )
+        save_state(state, cfg)
+    elif target_language is not None and target_language != state.target_language:
+        log_warning(f"Target language changed: {state.target_language} → {target_language}")
+        state.target_language = target_language
+        _invalidate_language_steps(state, cfg, video_id)
         save_state(state, cfg)
 
     from_step_enum = _step_name_from_str(from_step) if from_step else None
