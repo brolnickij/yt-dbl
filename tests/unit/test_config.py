@@ -16,9 +16,19 @@ class TestSettings:
         assert s.background_volume == 0.15
         assert s.max_speed_factor == 1.4
         assert s.voice_ref_duration == 7.0
-        assert s.max_loaded_models == 1
+        assert s.max_loaded_models >= 1  # auto-detected based on RAM
         assert s.sample_rate == 48000
         assert s.claude_model == "claude-opus-4-6"
+
+    def test_max_loaded_models_auto(self) -> None:
+        """Default 0 triggers auto-detection → always ≥ 1."""
+        s = Settings()
+        assert s.max_loaded_models >= 1
+
+    def test_max_loaded_models_explicit(self) -> None:
+        """Explicit value overrides auto-detection."""
+        s = Settings(max_loaded_models=5)
+        assert s.max_loaded_models == 5
 
     def test_job_dir(self, tmp_path: Path) -> None:
         s = Settings(work_dir=tmp_path / "work")

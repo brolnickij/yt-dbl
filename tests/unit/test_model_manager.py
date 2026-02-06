@@ -104,3 +104,16 @@ class TestModelManager:
         mgr.unload("m")
         mgr.register("m", loader=lambda: "v2")
         assert mgr.get("m") == "v2"
+
+    def test_registered_names(self) -> None:
+        """registered_names lists all registered (not just loaded) models."""
+        mgr = ModelManager(max_loaded=2)
+        mgr.register("a", loader=lambda: "a")
+        mgr.register("b", loader=lambda: "b")
+        assert set(mgr.registered_names) == {"a", "b"}
+        assert mgr.loaded_names == []
+
+    def test_cleanup_memory_mlx(self) -> None:
+        """_cleanup_memory should not crash even without MLX/torch installed."""
+        mgr = ModelManager(max_loaded=1)
+        mgr._cleanup_memory()  # should not raise
