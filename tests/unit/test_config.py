@@ -18,7 +18,7 @@ class TestSettings:
         assert s.voice_ref_duration == 7.0
         assert s.max_loaded_models == 1
         assert s.sample_rate == 48000
-        assert s.translation_batch_size == 20
+        assert s.claude_model == "claude-opus-4-6"
 
     def test_job_dir(self, tmp_path: Path) -> None:
         s = Settings(work_dir=tmp_path / "work")

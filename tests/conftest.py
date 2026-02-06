@@ -121,6 +121,28 @@ def prefill_separate(state: PipelineState, cfg: Settings) -> PipelineState:
     return state
 
 
+def prefill_translate(state: PipelineState, cfg: Settings) -> PipelineState:
+    """Utility: populate translate step so synthesize+ steps can run.
+
+    Call after prefill_transcribe when tests need post-translation state.
+    """
+    import json as _json
+
+    for seg in state.segments:
+        seg.translated_text = f"[translated] {seg.text}"
+
+    step = state.get_step(StepName.TRANSLATE)
+    step.status = StepStatus.COMPLETED
+    step.outputs = {"translations": "translations.json", "subtitles": "subtitles.srt"}
+
+    step_dir = cfg.step_dir(state.video_id, "04_translate")
+    data = [{"id": seg.id, "translated_text": seg.translated_text} for seg in state.segments]
+    (step_dir / "translations.json").write_text(
+        _json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return state
+
+
 def prefill_transcribe(state: PipelineState, cfg: Settings) -> PipelineState:
     """Utility: populate transcribe step so translate+ steps can run.
 

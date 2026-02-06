@@ -65,6 +65,9 @@ known-first-party = ["yt_dbl"]
 "src/yt_dbl/pipeline/transcribe.py" = [
     "PLC0415", # lazy import of mlx_audio
 ]
+"src/yt_dbl/pipeline/translate.py" = [
+    "PLC0415", # lazy import of anthropic
+]
 "tests/**" = [
     "T20",     # prints OK in tests
     "S",       # security checks irrelevant in tests

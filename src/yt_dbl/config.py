@@ -64,8 +64,7 @@ class Settings(BaseSettings):
     )
 
     # ── Translation ─────────────────────────────────────────────────────────
-    translation_batch_size: int = Field(default=20, ge=1)
-    claude_model: str = "claude-sonnet-4-20250514"
+    claude_model: str = "claude-opus-4-6"
 
     def job_dir(self, video_id: str) -> Path:
         """Return the working directory for a specific video job."""

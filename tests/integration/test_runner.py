@@ -8,7 +8,7 @@ from unittest.mock import patch
 from tests.conftest import prefill_download
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.runner import PipelineRunner, load_state, save_state
-from yt_dbl.schemas import PipelineState, StepName, StepStatus
+from yt_dbl.schemas import PipelineState, Segment, StepName, StepStatus
 
 
 def _fake_separation_factory(sep_dir: Path) -> Any:
@@ -66,6 +66,48 @@ def _fake_transcription_factory() -> dict[str, Any]:
     }
 
 
+def _fake_translation(
+    segments: list[Segment],
+    target_language: str,
+) -> dict[int, str]:
+    """Fake translate that returns deterministic translations."""
+    return {seg.id: f"[{target_language}] {seg.text}" for seg in segments}
+
+
+def _pipeline_patches(sep_dir: Path) -> Any:
+    """Context manager stack for all pipeline mocks (separate+transcribe+translate)."""
+    from contextlib import ExitStack
+
+    fakes = _fake_transcription_factory()
+
+    stack = ExitStack()
+    stack.enter_context(
+        patch(
+            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+            side_effect=_fake_separation_factory(sep_dir),
+        )
+    )
+    stack.enter_context(
+        patch(
+            "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
+            side_effect=fakes["asr"],
+        )
+    )
+    stack.enter_context(
+        patch(
+            "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
+            side_effect=fakes["alignment"],
+        )
+    )
+    stack.enter_context(
+        patch(
+            "yt_dbl.pipeline.translate.TranslateStep._translate",
+            side_effect=_fake_translation,
+        )
+    )
+    return stack
+
+
 class TestCheckpoints:
     def test_save_and_load(self, tmp_path: Path) -> None:
         cfg = Settings(work_dir=tmp_path / "work")
@@ -95,7 +137,7 @@ class TestCheckpoints:
 class TestPipelineRunner:
     def test_pipeline_from_separate(self, tmp_path: Path) -> None:
         """Run pipeline skipping download (which needs real yt-dlp)."""
-        cfg = Settings(work_dir=tmp_path / "work")
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
         state = PipelineState(
             video_id="test123",
             url="https://youtube.com/watch?v=test123",
@@ -105,23 +147,9 @@ class TestPipelineRunner:
         save_state(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
-        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with (
-            patch(
-                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-                side_effect=_fake_separation_factory(sep_dir),
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
-                side_effect=fakes["asr"],
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
-                side_effect=fakes["alignment"],
-            ),
-        ):
+        with _pipeline_patches(sep_dir):
             state = runner.run(state)
 
         assert state.next_step is None
@@ -135,28 +163,14 @@ class TestPipelineRunner:
             assert state.get_step(step_name).status == StepStatus.COMPLETED
 
     def test_resume_skips_completed(self, tmp_path: Path) -> None:
-        cfg = Settings(work_dir=tmp_path / "work")
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
-        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with (
-            patch(
-                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-                side_effect=_fake_separation_factory(sep_dir),
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
-                side_effect=fakes["asr"],
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
-                side_effect=fakes["alignment"],
-            ),
-        ):
+        with _pipeline_patches(sep_dir):
             state = runner.run(state)
 
         # Mark last 3 as pending again
@@ -169,28 +183,14 @@ class TestPipelineRunner:
         assert loaded.next_step == StepName.TRANSLATE
 
     def test_from_step(self, tmp_path: Path) -> None:
-        cfg = Settings(work_dir=tmp_path / "work")
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
-        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with (
-            patch(
-                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-                side_effect=_fake_separation_factory(sep_dir),
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
-                side_effect=fakes["asr"],
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
-                side_effect=fakes["alignment"],
-            ),
-        ):
+        with _pipeline_patches(sep_dir):
             state = runner.run(state)
             state = runner.run(state, from_step=StepName.TRANSLATE)
 
@@ -218,28 +218,14 @@ class TestPipelineRunner:
 
     def test_checkpoint_saved_on_success(self, tmp_path: Path) -> None:
         """After each step completes, state is persisted to disk."""
-        cfg = Settings(work_dir=tmp_path / "work")
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
-        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with (
-            patch(
-                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-                side_effect=_fake_separation_factory(sep_dir),
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
-                side_effect=fakes["asr"],
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
-                side_effect=fakes["alignment"],
-            ),
-        ):
+        with _pipeline_patches(sep_dir):
             state = runner.run(state)
 
         loaded = load_state(cfg, "test123")
@@ -267,28 +253,14 @@ class TestPipelineRunner:
 
     def test_step_timing_recorded(self, tmp_path: Path) -> None:
         """Completed steps record timing metadata."""
-        cfg = Settings(work_dir=tmp_path / "work")
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
-        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with (
-            patch(
-                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-                side_effect=_fake_separation_factory(sep_dir),
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
-                side_effect=fakes["asr"],
-            ),
-            patch(
-                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
-                side_effect=fakes["alignment"],
-            ),
-        ):
+        with _pipeline_patches(sep_dir):
             state = runner.run(state)
 
         result = state.get_step(StepName.SEPARATE)

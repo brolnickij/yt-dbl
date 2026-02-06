@@ -15,6 +15,7 @@ repos:
           - pydantic-settings>=2.12
           - typer>=0.21
           - rich>=14.0
+          - anthropic>=0.52
         args: [--config-file=mypy.ini]
         pass_filenames: false
 
