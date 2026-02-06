@@ -19,15 +19,15 @@ CLI-инструмент для автоматического дубляжа Yo
 │  1. DOWNLOAD                                                                    │
 │                                                                                 │
 │  yt-dlp скачивает видео, ffmpeg извлекает аудиодорожку                          │
-│  Выход: video.mp4, audio.wav (48 kHz, mono)                                    │
+│  Выход: video.mp4, audio.wav (48 kHz, mono)                                     │
 └─────────────────────────────────────┬───────────────────────────────────────────┘
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  2. SEPARATE                                                                    │
 │                                                                                 │
-│  BS-RoFormer разделяет аудио на голос и фон (ONNX + CoreML)                    │
-│  Выход: vocals.wav, background.wav                                             │
+│  BS-RoFormer разделяет аудио на голос и фон (ONNX + CoreML)                     │
+│  Выход: vocals.wav, background.wav                                              │
 └──────────────────┬──────────────────────────────────────────┬───────────────────┘
                    │                                          │
               vocals.wav                                background.wav
@@ -36,9 +36,9 @@ CLI-инструмент для автоматического дубляжа Yo
 ┌──────────────────────────────────────────────────────┐      │
 │  3. TRANSCRIBE                                       │      │
 │                                                      │      │
-│  VibeVoice-ASR (MLX, ~8 GB)                         │      │
+│  VibeVoice-ASR (MLX, ~8 GB)                          │      │
 │    → сегменты речи + speaker diarization             │      │
-│  Qwen3-ForcedAligner (MLX, ~600 MB)                 │      │
+│  Qwen3-ForcedAligner (MLX, ~600 MB)                  │      │
 │    → word-level timestamps                           │      │
 │  + автодетект языка по Unicode-скриптам              │      │
 │                                                      │      │
@@ -60,8 +60,8 @@ CLI-инструмент для автоматического дубляжа Yo
 ┌──────────────────────────────────────────────────────┐      │
 │  5. SYNTHESIZE                                       │      │
 │                                                      │      │
-│  Qwen3-TTS (MLX, ~1.7 GB) — voice cloning           │      │
-│  по голосовому референсу каждого спикера              │      │
+│  Qwen3-TTS (MLX, ~1.7 GB) — voice cloning            │      │
+│  по голосовому референсу каждого спикера             │      │
 │  Postprocessing (параллельно, ThreadPool):           │      │
 │    • speed-up (rubberband или atempo)                │      │
 │    • loudnorm (-16 LUFS, 2-pass)                     │      │
@@ -74,11 +74,11 @@ CLI-инструмент для автоматического дубляжа Yo
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  6. ASSEMBLE                                                                    │
 │                                                                                 │
-│  Речевой трек (crossfade 50 ms, equal-power) + background (sidechain ducking)  │
-│  + video (copy) + субтитры (softsub / hardsub / none)                          │
-│  Всё за один вызов ffmpeg                                                      │
+│  Речевой трек (crossfade 50 ms, equal-power) + background (sidechain ducking)   │
+│  + video (copy) + субтитры (softsub / hardsub / none)                           │
+│  Все за один вызов ffmpeg                                                       │
 │                                                                                 │
-│  Выход: result.mp4                                                             │
+│  Выход: result.mp4                                                              │
 └─────────────────────────────────────┬───────────────────────────────────────────┘
                                       │
                                       ▼
@@ -88,7 +88,7 @@ CLI-инструмент для автоматического дубляжа Yo
 ```
 
 ### Управление памятью
-ML-модели загружаются и выгружаются через LRU-менеджер. Количество одновременно загруженных моделей определяется автоматически по объёму RAM:
+ML-модели загружаются и выгружаются через LRU-менеджер. Количество одновременно загруженных моделей определяется автоматически по объему RAM:
 
 ```
 RAM              Моделей    Batch (separation)
@@ -108,14 +108,14 @@ work/
     ├── state.json                  ← чекпоинт пайплайна (JSON)
     ├── 01_download/
     │   ├── video.mp4               ← исходное видео
-    │   └── audio.wav               ← извлечённый аудиотрек (48 kHz, mono)
+    │   └── audio.wav               ← извлеченный аудиотрек (48 kHz, mono)
     ├── 02_separate/
     │   ├── vocals.wav              ← изолированный голос
     │   └── background.wav          ← фоновая музыка/шум
     ├── 03_transcribe/
     │   └── segments.json           ← сегменты, спикеры, слова с таймкодами
     ├── 04_translate/
-    │   ├── translations.json       ← переведённые тексты
+    │   ├── translations.json       ← переведенные тексты
     │   └── subtitles.srt           ← субтитры (SRT)
     ├── 05_synthesize/
     │   ├── ref_SPEAKER_00.wav      ← голосовой референс спикера
@@ -161,7 +161,7 @@ uv run yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID"
 # Указать целевой язык
 uv run yt-dbl dub "https://youtu.be/VIDEO_ID" -t es
 
-# Начать с определённого шага (предыдущие пропускаются)
+# Начать с определенного шага (предыдущие пропускаются)
 uv run yt-dbl dub "https://youtu.be/VIDEO_ID" --from-step translate
 
 # Проверить статус задачи
@@ -194,7 +194,7 @@ uv run yt-dbl dub <URL> [опции]
 uv run yt-dbl resume <video_id> [--max-models N]
 ```
 
-Пайплайн сохраняет `state.json` после каждого шага. При прерывании `resume` продолжит с последнего незавершённого шага.
+Пайплайн сохраняет `state.json` после каждого шага. При прерывании `resume` продолжит с последнего незавершенного шага.
 
 ### `status` — статус задачи
 ```bash
