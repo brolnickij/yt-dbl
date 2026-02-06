@@ -8,11 +8,11 @@ import pytest
 
 from yt_dbl.models.registry import (
     MODEL_REGISTRY,
-    _format_size,
     _hf_cache_dir,
     _repo_dir_name,
     check_model_downloaded,
     check_separator_downloaded,
+    format_model_size,
     get_model_size,
 )
 
@@ -95,13 +95,13 @@ class TestSeparatorCheck:
 
 class TestFormatSize:
     def test_zero(self) -> None:
-        assert _format_size(0) == "—"
+        assert format_model_size(0) == "—"
 
     def test_megabytes(self) -> None:
-        assert _format_size(500 * 1024 * 1024) == "500 MB"
+        assert format_model_size(500 * 1024 * 1024) == "500 MB"
 
     def test_gigabytes(self) -> None:
-        result = _format_size(int(1.5 * 1024**3))
+        result = format_model_size(int(1.5 * 1024**3))
         assert "1.5 GB" in result
 
 

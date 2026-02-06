@@ -11,9 +11,12 @@ from pathlib import Path
 
 __all__ = [
     "MODEL_REGISTRY",
+    "SEPARATOR_MODEL",
     "ModelInfo",
     "check_model_downloaded",
+    "check_separator_downloaded",
     "download_model",
+    "format_model_size",
     "get_model_size",
 ]
 
@@ -51,7 +54,7 @@ MODEL_REGISTRY: list[ModelInfo] = [
 ]
 
 # audio-separator model (downloaded via its own mechanism, not HF Hub)
-_SEPARATOR_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+SEPARATOR_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
 
 
 def _hf_cache_dir() -> Path:
@@ -104,7 +107,7 @@ def check_separator_downloaded(cache_dir: Path | None = None) -> bool:
     """Check if the audio-separator model is downloaded."""
     if cache_dir is None:
         cache_dir = Path.home() / ".cache" / "yt-dbl" / "models"
-    return (cache_dir / _SEPARATOR_MODEL).exists()
+    return (cache_dir / SEPARATOR_MODEL).exists()
 
 
 def download_model(repo_id: str) -> None:
@@ -114,7 +117,7 @@ def download_model(repo_id: str) -> None:
     snapshot_download(repo_id)
 
 
-def _format_size(size_bytes: int) -> str:
+def format_model_size(size_bytes: int) -> str:
     """Format byte count as human-readable string."""
     if size_bytes == 0:
         return "—"

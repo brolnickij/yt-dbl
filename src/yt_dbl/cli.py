@@ -193,11 +193,11 @@ def status(
 def models_list() -> None:
     """Show status of ML models."""
     from yt_dbl.models.registry import (
-        _SEPARATOR_MODEL,
         MODEL_REGISTRY,
-        _format_size,
+        SEPARATOR_MODEL,
         check_model_downloaded,
         check_separator_downloaded,
+        format_model_size,
         get_model_size,
     )
 
@@ -215,7 +215,7 @@ def models_list() -> None:
         total_size += size_bytes
 
         status_str = "[green]✓ downloaded[/green]" if downloaded else "[dim]not downloaded[/dim]"
-        size_str = _format_size(size_bytes) if downloaded else info.approx_size
+        size_str = format_model_size(size_bytes) if downloaded else info.approx_size
 
         table.add_row(info.repo_id.split("/")[-1], info.purpose, status_str, size_str)
 
@@ -224,10 +224,10 @@ def models_list() -> None:
     sep_status = "[green]✓ downloaded[/green]" if sep_downloaded else "[dim]not downloaded[/dim]"
     sep_size = ""
     if sep_downloaded:
-        sep_path = settings.model_cache_dir / _SEPARATOR_MODEL
+        sep_path = settings.model_cache_dir / SEPARATOR_MODEL
         sep_bytes = sep_path.stat().st_size
         total_size += sep_bytes
-        sep_size = _format_size(sep_bytes)
+        sep_size = format_model_size(sep_bytes)
     else:
         sep_size = "~200 MB"
 
@@ -236,7 +236,7 @@ def models_list() -> None:
     console.print(table)
 
     if total_size > 0:
-        console.print(f"\n  Total cached: {_format_size(total_size)}")
+        console.print(f"\n  Total cached: {format_model_size(total_size)}")
     console.print("  [info]Use 'yt-dbl models download' to pre-download all models[/info]")
 
 

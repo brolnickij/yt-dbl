@@ -12,7 +12,7 @@ from math import gcd
 from typing import TYPE_CHECKING
 
 from yt_dbl.pipeline.base import PipelineStep, StepValidationError
-from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName
+from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName, StepResult
 from yt_dbl.utils.audio import get_audio_duration, run_ffmpeg
 from yt_dbl.utils.logging import log_info
 
@@ -310,9 +310,9 @@ class AssembleStep(PipelineStep):
     @staticmethod
     def _add_subtitle_output(
         state: PipelineState,
-        result: object,
+        result: StepResult,
     ) -> None:
         """Copy subtitle reference from translate step into outputs."""
         trans = state.get_step(StepName.TRANSLATE)
         if "subtitles" in trans.outputs:
-            result.outputs["subtitles"] = trans.outputs["subtitles"]  # type: ignore[attr-defined]
+            result.outputs["subtitles"] = trans.outputs["subtitles"]
