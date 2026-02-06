@@ -226,6 +226,10 @@ class TestSeparationConfig:
         cfg = Settings()
         assert cfg.separation_overlap == 8
 
+    def test_default_autocast_enabled(self) -> None:
+        cfg = Settings()
+        assert cfg.separation_use_autocast is True
+
     def test_model_cache_dir(self) -> None:
         cfg = Settings()
         assert "yt-dbl" in str(cfg.model_cache_dir)
@@ -234,3 +238,8 @@ class TestSeparationConfig:
         monkeypatch.setenv("YT_DBL_SEPARATION_MODEL", "custom_model.ckpt")
         cfg = Settings()
         assert cfg.separation_model == "custom_model.ckpt"
+
+    def test_disable_autocast_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("YT_DBL_SEPARATION_USE_AUTOCAST", "false")
+        cfg = Settings()
+        assert cfg.separation_use_autocast is False
