@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import gc
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep
@@ -345,45 +347,74 @@ class SynthesizeStep(PipelineStep):
                 gc.collect()
 
     def _postprocess_segments(self, state: PipelineState) -> None:
-        """Speed-adjust and normalize each synthesized segment."""
+        """Speed-adjust and normalize each synthesized segment.
+
+        Segments are independent — each one gets its own ffmpeg subprocess
+        chain (duration probe, optional speed-up, loudness normalisation).
+        We run them in parallel via a thread pool; the GIL is released during
+        subprocess I/O so all workers execute concurrently.
+        """
         progress = create_progress()
         with progress:
             task = progress.add_task("  Postprocessing", total=len(state.segments))
+
+            # Quick pass: skip already-done segments, collect work items
+            to_process: list[Segment] = []
             for seg in state.segments:
-                raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
                 final_path = self.step_dir / f"segment_{seg.id:04d}.wav"
+                raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
 
                 if final_path.exists():
                     seg.synth_path = final_path.name
                     progress.advance(task)
-                    continue
-
-                if not raw_path.exists():
+                elif not raw_path.exists():
                     progress.advance(task)
-                    continue
-
-                # Check if we need to speed up
-                synth_dur = get_audio_duration(raw_path)
-                original_dur = seg.duration
-                speed_factor = 1.0
-
-                if synth_dur > original_dur > 0:
-                    speed_factor = synth_dur / original_dur
-                    max_speed = self.settings.max_speed_factor
-                    speed_factor = min(speed_factor, max_speed)
-
-                # Apply speed + normalise
-                _speed_threshold = 1.01
-                if speed_factor > _speed_threshold:
-                    sped_path = self.step_dir / f"sped_{seg.id:04d}.wav"
-                    _speed_up_audio(raw_path, sped_path, speed_factor)
-                    _normalize_loudness(sped_path, final_path)
-                    seg.synth_speed_factor = round(speed_factor, 3)
                 else:
-                    _normalize_loudness(raw_path, final_path)
+                    to_process.append(seg)
 
-                seg.synth_path = final_path.name
-                progress.advance(task)
+            if not to_process:
+                return
+
+            # Parallel postprocessing: each segment is independent
+            max_workers = min(os.cpu_count() or 1, len(to_process))
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {pool.submit(self._postprocess_one, seg): seg for seg in to_process}
+                for future in as_completed(futures):
+                    seg = futures[future]
+                    synth_path, speed_factor = future.result()
+                    seg.synth_path = synth_path
+                    if speed_factor is not None:
+                        seg.synth_speed_factor = speed_factor
+                    progress.advance(task)
+
+    def _postprocess_one(self, seg: Segment) -> tuple[str, float | None]:
+        """Postprocess a single segment: speed-adjust + loudness-normalize.
+
+        Runs in a worker thread.  All heavy lifting is done by ffmpeg/ffprobe
+        subprocesses, so the GIL is released and segments process truly in
+        parallel.
+        """
+        raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
+        final_path = self.step_dir / f"segment_{seg.id:04d}.wav"
+
+        synth_dur = get_audio_duration(raw_path)
+        original_dur = seg.duration
+        speed_factor = 1.0
+
+        if synth_dur > original_dur > 0:
+            speed_factor = synth_dur / original_dur
+            max_speed = self.settings.max_speed_factor
+            speed_factor = min(speed_factor, max_speed)
+
+        _speed_threshold = 1.01
+        if speed_factor > _speed_threshold:
+            sped_path = self.step_dir / f"sped_{seg.id:04d}.wav"
+            _speed_up_audio(raw_path, sped_path, speed_factor)
+            _normalize_loudness(sped_path, final_path)
+            return final_path.name, round(speed_factor, 3)
+
+        _normalize_loudness(raw_path, final_path)
+        return final_path.name, None
 
     # ── TTS model ───────────────────────────────────────────────────────────
 
