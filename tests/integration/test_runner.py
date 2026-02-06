@@ -192,6 +192,50 @@ class TestCheckpoints:
         data = json.loads(path.read_text())
         assert data["video_id"] == "test123"
 
+    def test_save_no_leftover_tmp_files(self, tmp_path: Path) -> None:
+        """After save_state completes, no .tmp files remain."""
+        cfg = Settings(work_dir=tmp_path / "work")
+        state = PipelineState(video_id="test123")
+        save_state(state, cfg)
+
+        job_dir = cfg.work_dir / "test123"
+        tmp_files = list(job_dir.glob("*.tmp"))
+        assert tmp_files == []
+
+    def test_save_overwrites_atomically(self, tmp_path: Path) -> None:
+        """A second save_state replaces the first without corruption."""
+        cfg = Settings(work_dir=tmp_path / "work")
+        state = PipelineState(video_id="test123", target_language="en")
+        save_state(state, cfg)
+
+        state.target_language = "fr"
+        save_state(state, cfg)
+
+        loaded = load_state(cfg, "test123")
+        assert loaded is not None
+        assert loaded.target_language == "fr"
+
+    def test_save_cleans_tmp_on_error(self, tmp_path: Path) -> None:
+        """If serialisation fails, no .tmp file is left behind."""
+        cfg = Settings(work_dir=tmp_path / "work")
+        state = PipelineState(video_id="test123")
+        # Ensure job dir exists
+        cfg.job_dir("test123")
+
+        with (
+            patch.object(
+                PipelineState,
+                "model_dump_json",
+                side_effect=RuntimeError("boom"),
+            ),
+            pytest.raises(RuntimeError, match="boom"),
+        ):
+            save_state(state, cfg)
+
+        job_dir = cfg.work_dir / "test123"
+        tmp_files = list(job_dir.glob("*.tmp"))
+        assert tmp_files == []
+
 
 class TestPipelineRunner:
     def test_pipeline_from_separate(self, tmp_path: Path) -> None:

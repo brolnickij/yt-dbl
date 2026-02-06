@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import tempfile
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from yt_dbl.models.manager import ModelManager
@@ -35,8 +39,6 @@ from .transcribe import TranscribeStep
 from .translate import TranslateStep
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from yt_dbl.config import Settings
 
     from .base import PipelineStep
@@ -51,9 +53,27 @@ def _state_path(settings: Settings, video_id: str) -> Path:
 
 
 def save_state(state: PipelineState, settings: Settings) -> Path:
-    """Persist pipeline state to disk."""
+    """Persist pipeline state to disk atomically.
+
+    Writes to a temporary file in the same directory and then replaces
+    the target via ``os.replace`` — which is atomic on POSIX.  This
+    prevents partial/corrupt ``state.json`` if the process is killed
+    mid-write.
+    """
     path = _state_path(settings, state.video_id)
-    path.write_text(state.model_dump_json(), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_str = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    tmp = Path(tmp_str)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(state.model_dump_json())
+            f.flush()
+            os.fsync(f.fileno())
+        tmp.replace(path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
     return path
 
 
