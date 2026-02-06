@@ -50,6 +50,8 @@ pipx install yt-dbl
 ```
 
 > **Note:** `--prerelease=allow` is needed because `mlx-audio` depends on a pre-release version of `transformers`.
+>
+> If `yt-dbl` is not found after installation, run `uv tool update-shell && source ~/.zshrc` to add `~/.local/bin` to your PATH.
 
 <details>
 <summary>From source</summary>
