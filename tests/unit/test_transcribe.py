@@ -283,6 +283,18 @@ class TestLanguageDetection:
         segs = [{"text": "안녕하세요 세계"}]
         assert TranscribeStep._detect_language(segs) == "ko"
 
+    def test_arabic(self) -> None:
+        segs = [{"text": "مرحبا بالعالم"}]
+        assert TranscribeStep._detect_language(segs) == "ar"
+
+    def test_hindi(self) -> None:
+        segs = [{"text": "नमस्ते दुनिया"}]
+        assert TranscribeStep._detect_language(segs) == "hi"
+
+    def test_thai(self) -> None:
+        segs = [{"text": "สวัสดีชาวโลก"}]
+        assert TranscribeStep._detect_language(segs) == "th"
+
     def test_empty(self) -> None:
         assert TranscribeStep._detect_language([]) == "en"
 
