@@ -1,5 +1,8 @@
 # yt-dbl
 > [!WARNING]
+> **NOT STABLE, PLEASE DON'T USE FOR LONG VIDEOS**
+
+> [!WARNING]
 > **Apple Silicon only** (M1/M2/M3/M4) — all ML inference runs on Metal GPU via MLX
 >
 > Tested on **M4 Pro** (20-core GPU, 48 GB unified memory)
