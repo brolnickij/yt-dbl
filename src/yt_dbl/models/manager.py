@@ -11,9 +11,12 @@ from __future__ import annotations
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from yt_dbl.utils.logging import get_metal_memory_mb, log_info, log_model_load, log_model_unload
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 __all__ = ["ModelManager"]
 
@@ -53,13 +56,13 @@ class ModelManager:
     def __init__(self, max_loaded: int = 2) -> None:
         self.max_loaded = max_loaded
         self._models: OrderedDict[str, LoadedModel] = OrderedDict()
-        self._loaders: dict[str, tuple[Any, Any]] = {}  # name → (load_fn, unload_fn)
+        self._loaders: dict[str, tuple[Callable[[], Any], Callable[[Any], None] | None]] = {}
 
     def register(
         self,
         name: str,
-        loader: Any,  # Callable[[], Any]
-        unloader: Any | None = None,  # Callable[[Any], None]
+        loader: Callable[[], Any],
+        unloader: Callable[[Any], None] | None = None,
     ) -> None:
         """Register a model with its loader and optional unloader."""
         self._loaders[name] = (loader, unloader)

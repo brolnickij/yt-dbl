@@ -21,6 +21,8 @@ from yt_dbl.utils.logging import console, create_progress, log_info, suppress_li
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from yt_dbl.models.protocols import AlignerModel, STTModel
+
 SEGMENTS_FILE = "segments.json"
 
 # Key-name variants produced by different VibeVoice versions
@@ -172,7 +174,7 @@ class TranscribeStep(PipelineStep):
             if model_name not in self.model_manager.registered_names:
                 self.model_manager.register(
                     model_name,
-                    loader=lambda name=model_name: self._load_stt(name),
+                    loader=lambda name=model_name: self._load_stt(name),  # type: ignore[misc]
                 )
             model = self.model_manager.get(model_name)
         else:
@@ -207,7 +209,13 @@ class TranscribeStep(PipelineStep):
 
     @staticmethod
     def _load_stt(model_name: str) -> Any:
-        """Load an STT model with noise suppression."""
+        """Load an STT/aligner model with noise suppression.
+
+        Returns an opaque model object that satisfies either
+        :class:`~yt_dbl.models.protocols.STTModel` or
+        :class:`~yt_dbl.models.protocols.AlignerModel` depending on
+        the weights loaded.
+        """
         from mlx_audio.stt.utils import load as load_stt_model
 
         log_info(f"Loading model: {model_name}")
@@ -216,7 +224,7 @@ class TranscribeStep(PipelineStep):
 
     # ── Single-pass & chunked ASR helpers ───────────────────────────────────
 
-    def _run_asr_single(self, model: Any, audio_path: Path) -> list[dict[str, Any]]:
+    def _run_asr_single(self, model: STTModel, audio_path: Path) -> list[dict[str, Any]]:
         """Run ASR on a single audio file (must fit within model limits)."""
         with console.status(
             "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
@@ -231,7 +239,7 @@ class TranscribeStep(PipelineStep):
 
     def _run_asr_chunked(
         self,
-        model: Any,
+        model: STTModel,
         vocals_path: Path,
         duration_sec: float,
         max_chunk_sec: float,
@@ -474,7 +482,7 @@ class TranscribeStep(PipelineStep):
             if aligner_name not in self.model_manager.registered_names:
                 self.model_manager.register(
                     aligner_name,
-                    loader=lambda name=aligner_name: self._load_stt(name),
+                    loader=lambda name=aligner_name: self._load_stt(name),  # type: ignore[misc]
                 )
             aligner = self.model_manager.get(aligner_name)
         else:
@@ -545,7 +553,7 @@ class TranscribeStep(PipelineStep):
 
     @staticmethod
     def _align_segment(
-        aligner: Any,
+        aligner: AlignerModel,
         audio: Any,
         seg: dict[str, Any],
         language: str,

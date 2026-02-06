@@ -27,6 +27,8 @@ from yt_dbl.utils.logging import create_progress, log_info, log_warning, suppres
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from yt_dbl.models.protocols import TTSChunk, TTSModel
+
 SYNTH_META_FILE = "synth_meta.json"
 
 
@@ -299,7 +301,7 @@ class SynthesizeStep(PipelineStep):
 
     # ── TTS model ───────────────────────────────────────────────────────────
 
-    def _load_tts_model(self) -> Any:
+    def _load_tts_model(self) -> TTSModel:
         """Load Qwen3-TTS model via mlx-audio (through ModelManager if available)."""
         model_name = self.settings.tts_model
 
@@ -307,24 +309,24 @@ class SynthesizeStep(PipelineStep):
             if model_name not in self.model_manager.registered_names:
                 self.model_manager.register(
                     model_name,
-                    loader=lambda name=model_name: self._load_tts_raw(name),
+                    loader=lambda name=model_name: self._load_tts_raw(name),  # type: ignore[misc]
                 )
-            return self.model_manager.get(model_name)
+            return self.model_manager.get(model_name)  # type: ignore[no-any-return]
 
         return self._load_tts_raw(model_name)
 
     @staticmethod
-    def _load_tts_raw(model_name: str) -> Any:
+    def _load_tts_raw(model_name: str) -> TTSModel:
         """Raw model loading without manager."""
         from mlx_audio.tts.utils import load_model
 
         log_info(f"Loading TTS model: {model_name}")
         with suppress_library_noise():
-            return load_model(model_name)
+            return load_model(model_name)  # type: ignore[no-any-return]
 
     def _run_tts(
         self,
-        model: Any,
+        model: TTSModel,
         text: str,
         ref_audio: Path | None,
         ref_text: str,
@@ -346,7 +348,7 @@ class SynthesizeStep(PipelineStep):
             if ref_text:
                 kwargs["ref_text"] = ref_text
 
-        results = list(model.generate(**kwargs))
+        results: list[TTSChunk] = list(model.generate(**kwargs))
         if not results:
             msg = f"TTS returned no audio for text: {text[:50]}"
             raise SynthesisError(msg)
