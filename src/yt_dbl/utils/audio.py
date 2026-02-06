@@ -7,19 +7,29 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
-__all__ = ["extract_audio", "get_audio_duration", "run_ffmpeg"]
+__all__ = ["extract_audio", "get_audio_duration", "run_ffmpeg", "set_ffmpeg_path"]
 
 # Preferred ffmpeg-full path (brew keg-only install)
 _FFMPEG_FULL_BIN = "/opt/homebrew/opt/ffmpeg-full/bin"
+
+# Module-level override set via set_ffmpeg_path()
+_ffmpeg_override: str = ""
+
+
+def set_ffmpeg_path(path: str) -> None:
+    """Set explicit ffmpeg binary path and clear detection caches."""
+    global _ffmpeg_override  # noqa: PLW0603
+    _ffmpeg_override = path
+    _detect_ffmpeg.cache_clear()
+    _detect_ffprobe.cache_clear()
+    has_rubberband.cache_clear()
 
 
 @lru_cache(maxsize=1)
 def _detect_ffmpeg() -> str:
     """Auto-detect best ffmpeg binary, preferring ffmpeg-full for rubberband."""
-    from yt_dbl.config import settings  # noqa: PLC0415
-
-    if settings.ffmpeg_path:
-        return settings.ffmpeg_path
+    if _ffmpeg_override:
+        return _ffmpeg_override
 
     full = f"{_FFMPEG_FULL_BIN}/ffmpeg"
     if shutil.which(full):

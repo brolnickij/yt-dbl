@@ -15,38 +15,34 @@ from yt_dbl.utils.audio import (
     get_audio_duration,
     has_rubberband,
     run_ffmpeg,
+    set_ffmpeg_path,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-# Reset lru_cache between tests to avoid stale state
+# Reset lru_cache and override between tests to avoid stale state
 @pytest.fixture(autouse=True)
 def _clear_detection_cache() -> None:
-    _detect_ffmpeg.cache_clear()
+    set_ffmpeg_path("")
     _detect_ffprobe.cache_clear()
     has_rubberband.cache_clear()
 
 
 class TestFfmpegDetection:
-    @patch("yt_dbl.config.settings")
     @patch("shutil.which", return_value="/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg")
-    def test_prefers_ffmpeg_full(self, mock_which: MagicMock, mock_settings: MagicMock) -> None:
-        mock_settings.ffmpeg_path = ""
+    def test_prefers_ffmpeg_full(self, mock_which: MagicMock) -> None:
         result = _detect_ffmpeg()
         assert "ffmpeg-full" in result
 
-    @patch("yt_dbl.config.settings")
-    def test_uses_explicit_path(self, mock_settings: MagicMock) -> None:
-        mock_settings.ffmpeg_path = "/custom/ffmpeg"
+    def test_uses_explicit_path(self) -> None:
+        set_ffmpeg_path("/custom/ffmpeg")
         result = _detect_ffmpeg()
         assert result == "/custom/ffmpeg"
 
-    @patch("yt_dbl.config.settings")
     @patch("shutil.which", return_value=None)
-    def test_falls_back_to_ffmpeg(self, mock_which: MagicMock, mock_settings: MagicMock) -> None:
-        mock_settings.ffmpeg_path = ""
+    def test_falls_back_to_ffmpeg(self, mock_which: MagicMock) -> None:
         result = _detect_ffmpeg()
         assert result == "ffmpeg"
 

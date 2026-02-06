@@ -14,6 +14,7 @@ from yt_dbl.schemas import (
     StepName,
     StepStatus,
 )
+from yt_dbl.utils.audio import set_ffmpeg_path
 from yt_dbl.utils.logging import (
     console,
     log_info,
@@ -86,6 +87,7 @@ class PipelineRunner:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.model_manager = ModelManager(max_loaded=settings.max_loaded_models)
+        set_ffmpeg_path(settings.ffmpeg_path)
 
     def run(  # noqa: PLR0912
         self,
