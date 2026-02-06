@@ -339,8 +339,10 @@ class SynthesizeStep(PipelineStep):
                     seg.synth_path = raw_path.name
                     progress.advance(task)
         finally:
-            del model
-            gc.collect()
+            # If not managed, free manually
+            if self.model_manager is None:
+                del model
+                gc.collect()
 
     def _postprocess_segments(self, state: PipelineState) -> None:
         """Speed-adjust and normalize each synthesized segment."""
@@ -386,10 +388,24 @@ class SynthesizeStep(PipelineStep):
     # ── TTS model ───────────────────────────────────────────────────────────
 
     def _load_tts_model(self) -> Any:
-        """Load Qwen3-TTS model via mlx-audio."""
+        """Load Qwen3-TTS model via mlx-audio (through ModelManager if available)."""
+        model_name = self.settings.tts_model
+
+        if self.model_manager is not None:
+            if model_name not in self.model_manager.registered_names:
+                self.model_manager.register(
+                    model_name,
+                    loader=lambda name=model_name: self._load_tts_raw(name),
+                )
+            return self.model_manager.get(model_name)
+
+        return self._load_tts_raw(model_name)
+
+    @staticmethod
+    def _load_tts_raw(model_name: str) -> Any:
+        """Raw model loading without manager."""
         from mlx_audio.tts.utils import load_model
 
-        model_name = self.settings.tts_model
         log_info(f"Loading TTS model: {model_name}")
         with suppress_library_noise():
             return load_model(model_name)
