@@ -146,7 +146,7 @@ class StepResult(BaseModel):
 
 
 class PipelineState(BaseModel):
-    """Full state of a dubbing job, persisted as work/{video_id}/state.json."""
+    """Full state of a dubbing job, persisted as dubbed/{video_id}/state.json."""
 
     video_id: str
     url: str = ""

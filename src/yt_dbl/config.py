@@ -139,7 +139,7 @@ class Settings(BaseSettings):
         return self
 
     # ── Paths ───────────────────────────────────────────────────────────────
-    work_dir: Path = Path("work")
+    work_dir: Path = Path("dubbed")
     model_cache_dir: Path = Field(
         default_factory=lambda: Path.home() / ".cache" / "yt-dbl" / "models",
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -12,6 +13,11 @@ from yt_dbl import __version__
 from yt_dbl.config import Settings
 from yt_dbl.schemas import STEP_ORDER, PipelineState, StepName, StepStatus
 from yt_dbl.utils.logging import console
+
+_OutputDir = Annotated[
+    Path | None,
+    typer.Option("-o", "--output-dir", help="Output directory (default: ./dubbed)"),
+]
 
 app = typer.Typer(
     name="yt-dbl",
@@ -85,6 +91,7 @@ def dub(
     output_format: Annotated[
         str | None, typer.Option("--format", help="Output format (mp4/mkv)")
     ] = None,
+    output_dir: _OutputDir = None,
 ) -> None:
     """Dub a YouTube video with translated voice cloning."""
     from yt_dbl.pipeline.runner import PipelineRunner, load_state, save_state
@@ -96,6 +103,7 @@ def dub(
         max_speed_factor=max_speed,
         subtitle_mode="none" if no_subs else sub_mode,
         output_format=output_format,
+        work_dir=output_dir,
     )
 
     video_id = _extract_video_id(url)
@@ -122,11 +130,12 @@ def resume(
     max_models: Annotated[
         int | None, typer.Option("--max-models", help="Max models in memory")
     ] = None,
+    output_dir: _OutputDir = None,
 ) -> None:
     """Resume a previously interrupted dubbing job."""
     from yt_dbl.pipeline.runner import PipelineRunner, load_state
 
-    cfg = _make_settings(max_loaded_models=max_models)
+    cfg = _make_settings(max_loaded_models=max_models, work_dir=output_dir)
 
     state = load_state(cfg, video_id)
     if state is None:
@@ -146,11 +155,12 @@ def resume(
 @app.command()
 def status(
     video_id: Annotated[str, typer.Argument(help="Video ID to check")],
+    output_dir: _OutputDir = None,
 ) -> None:
     """Show the status of a dubbing job."""
     from yt_dbl.pipeline.runner import load_state
 
-    cfg = Settings()
+    cfg = _make_settings(work_dir=output_dir)
     state = load_state(cfg, video_id)
     if state is None:
         console.print(f"[error]No job found for video ID: {video_id}[/error]")

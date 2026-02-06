@@ -116,13 +116,16 @@ YT_DBL_SAMPLE_RATE=48000
 | `voice_ref_duration` | `YT_DBL_VOICE_REF_DURATION` | `7.0` | Voice reference duration (3–30 sec) |
 | `max_loaded_models` | `YT_DBL_MAX_LOADED_MODELS` | `0` (auto) | Max models in memory |
 | `anthropic_api_key` | `YT_DBL_ANTHROPIC_API_KEY` | — | Anthropic API key |
-| `work_dir` | `YT_DBL_WORK_DIR` | `work` | Working directory |
+| `work_dir` | `YT_DBL_WORK_DIR` | `dubbed` | Output directory |
 
 
 ## Quick start
 ```bash
 # Dub a video into Russian (default)
 yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Custom output directory
+yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID" -o ./my-output
 
 # Specify target language
 yt-dbl dub "https://youtu.be/VIDEO_ID" -t es
@@ -148,6 +151,7 @@ yt-dbl dub <URL> [options]
 | Option | Description | Default |
 |---|---|---|
 | `-t`, `--target-language` | Target language | `ru` |
+| `-o`, `--output-dir` | Output directory | `./dubbed` |
 | `--bg-volume` | Background volume (0.0–1.0) | `0.15` |
 | `--max-speed` | Max TTS speed-up (1.0–2.0) | `1.4` |
 | `--max-models` | Max models in memory | auto (by RAM) |
@@ -158,7 +162,7 @@ yt-dbl dub <URL> [options]
 
 ### `resume` — resume an interrupted job
 ```bash
-yt-dbl resume <video_id> [--max-models N]
+yt-dbl resume <video_id> [--max-models N] [-o DIR]
 ```
 
 The pipeline saves `state.json` after each step. If interrupted, `resume` picks up from the last incomplete step.
@@ -280,9 +284,9 @@ RAM              Models     Batch (separation)
 
 The ASR model (~8 GB) is unloaded before loading the Aligner so both don't occupy memory at the same time.
 
-### Working directory structure
+### Output directory structure
 ```
-work/
+dubbed/
 └── <video_id>/
     ├── state.json                  ← pipeline checkpoint (JSON)
     ├── 01_download/

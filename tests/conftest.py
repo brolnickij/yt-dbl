@@ -71,7 +71,7 @@ SHORT_VIDEO_ID = "jNQXAC9IVRw"
 @pytest.fixture
 def work_dir(tmp_path: Path) -> Path:
     """Provide an isolated temporary work dir for a single test."""
-    d = tmp_path / "work"
+    d = tmp_path / "dubbed"
     d.mkdir()
     return d
 
