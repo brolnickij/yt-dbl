@@ -45,6 +45,13 @@ separate letters with spaces (e.g. "FBI" → "F B I").
 natural conversational flow. Avoid bookish or formal written style.
 10. NEVER use characters that TTS cannot speak naturally: parentheses (), \
 brackets [], slashes /, quotation marks. Rephrase in plain words instead.
+11. SPLIT long sentences into SHORT ones (max 10-12 words each). \
+TTS produces the best pronunciation on short, simple sentences. \
+Use periods instead of semicolons or complex conjunctions.
+12. For Russian: ALWAYS use the letter «ё» where it belongs \
+(«всё» not «все» when meaning "everything", «ещё» not «еще», \
+«её» not «ее» when meaning "her/hers", etc.). \
+This helps TTS place stress correctly.
 OUTPUT FORMAT — return ONLY a raw JSON array, no markdown, no commentary:
 [
   {{"id": 0, "translated_text": "Translated text here"}},
