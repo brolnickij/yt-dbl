@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  UV_TORCH_BACKEND: cpu
+
 jobs:
   quality:
     name: Lint & Type Check
