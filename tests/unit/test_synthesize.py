@@ -332,10 +332,11 @@ class TestSynthesizeStepRun:
         assert state.get_step(StepName.SYNTHESIZE).outputs["meta"] == SYNTH_META_FILE
 
     def test_run_tts_empty_result_raises(self, tmp_path: Path) -> None:
-        """SynthesisError is raised when TTS model returns no audio chunks."""
+        """SynthesisError is raised when TTS model returns no audio chunks (after retries)."""
         step, _, state = _make_step(tmp_path)
 
         mock_model = MagicMock()
+        tts_call_count = 0
 
         def _run_tts_empty(
             _self: object,
@@ -345,6 +346,8 @@ class TestSynthesizeStepRun:
             _ref_text: object,
             _lang: object,
         ) -> Any:
+            nonlocal tts_call_count
+            tts_call_count += 1
             raise SynthesisError("TTS returned no audio for text: Privet")
 
         with (
@@ -364,9 +367,12 @@ class TestSynthesizeStepRun:
                 "yt_dbl.utils.audio_processing.run_ffmpeg",
                 side_effect=_ffmpeg_touch,
             ),
-            pytest.raises(SynthesisError, match="no audio"),
+            pytest.raises(SynthesisError, match="after retries"),
         ):
             step.run(state)
+
+        # 3 segments × 3 attempts each (default tts_max_retries=2)
+        assert tts_call_count == 9
 
     def test_postprocess_failure_raises_synthesis_error(self, tmp_path: Path) -> None:
         """When postprocessing fails for some segments, SynthesisError is raised."""
@@ -453,6 +459,157 @@ class TestSynthesizeStepRun:
             pytest.raises(SynthesisError, match="3 segment"),
         ):
             step.run(state)
+
+    def test_tts_retry_succeeds_on_second_attempt(self, tmp_path: Path) -> None:
+        """TTS retry: first attempt fails, second succeeds — no error raised."""
+        step, _, state = _make_step(tmp_path)
+
+        mock_model = MagicMock()
+        attempt_counts: dict[int, int] = {}
+
+        def _fail_then_succeed(
+            _self: object,
+            _model: object,
+            _text: object,
+            _ref: object,
+            _ref_text: object,
+            _lang: object,
+        ) -> Any:
+            import numpy as np
+
+            # Identify segment by text content (unique per segment)
+            seg_id = hash(_text) % 1000
+            attempt_counts.setdefault(seg_id, 0)
+            attempt_counts[seg_id] += 1
+            if attempt_counts[seg_id] == 1:
+                raise RuntimeError("transient GPU error")
+            return np.zeros(24000, dtype=np.float32)
+
+        with (
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _fail_then_succeed,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.extract_voice_reference",
+                side_effect=lambda *a, **kw: Path(a[2]).write_bytes(b"fake-ref") or a[2],
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.postprocess_segment",
+                side_effect=_fake_postprocess,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.get_audio_duration",
+                return_value=1.0,
+            ),
+        ):
+            state = step.run(state)
+
+        # All segments should have synth_path set
+        for seg in state.segments:
+            assert seg.synth_path != ""
+
+    def test_tts_partial_failure_reports_failed_ids(self, tmp_path: Path) -> None:
+        """When one segment permanently fails, SynthesisError lists its ID."""
+        step, _, state = _make_step(tmp_path)
+
+        mock_model = MagicMock()
+
+        def _one_always_fails(
+            _self: object,
+            _model: object,
+            text: object,
+            _ref: object,
+            _ref_text: object,
+            _lang: object,
+        ) -> Any:
+            import numpy as np
+
+            # Fail on segment 1's translated text
+            if text == "Segodnya pogovorim.":
+                raise RuntimeError("permanent failure")
+            return np.zeros(24000, dtype=np.float32)
+
+        with (
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _one_always_fails,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.extract_voice_reference",
+                side_effect=lambda *a, **kw: Path(a[2]).write_bytes(b"fake-ref") or a[2],
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.postprocess_segment",
+                side_effect=_fake_postprocess,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.get_audio_duration",
+                return_value=1.0,
+            ),
+            pytest.raises(SynthesisError, match="1 segment"),
+        ):
+            step.run(state)
+
+    def test_tts_zero_retries_no_retry(self, tmp_path: Path) -> None:
+        """With tts_max_retries=0, each segment is attempted exactly once."""
+        step, cfg, state = _make_step(tmp_path)
+        object.__setattr__(cfg, "tts_max_retries", 0)
+
+        mock_model = MagicMock()
+        call_count = 0
+
+        def _always_fail(
+            _self: object,
+            _model: object,
+            _text: object,
+            _ref: object,
+            _ref_text: object,
+            _lang: object,
+        ) -> Any:
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("fail")
+
+        with (
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _always_fail,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
+            ),
+            patch(
+                "yt_dbl.utils.audio_processing.run_ffmpeg",
+                side_effect=_ffmpeg_touch,
+            ),
+            pytest.raises(SynthesisError, match="3 segment"),
+        ):
+            step.run(state)
+
+        # 3 segments × 1 attempt each (no retries)
+        assert call_count == 3
 
 
 # ── Config tests ────────────────────────────────────────────────────────────

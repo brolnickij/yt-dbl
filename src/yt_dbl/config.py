@@ -160,6 +160,7 @@ class Settings(BaseSettings):
     tts_top_p: float = Field(default=1.0, ge=0.0, le=1.0)
     tts_repetition_penalty: float = Field(default=1.05, ge=1.0, le=2.0)
     tts_sample_rate: int = 24000  # Qwen3-TTS native output rate (model.sample_rate)
+    tts_max_retries: int = Field(default=2, ge=0, le=5)
 
     # ── Translation ─────────────────────────────────────────────────────────
     claude_model: str = "claude-sonnet-4-5"

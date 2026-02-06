@@ -140,14 +140,22 @@ class SynthesizeStep(PipelineStep):
         state: PipelineState,
         refs: dict[str, Path],
     ) -> None:
-        """Run TTS for each segment using speaker's voice reference."""
+        """Run TTS for each segment using speaker's voice reference.
+
+        Each segment is attempted up to ``tts_max_retries + 1`` times.
+        Permanently failed segments are collected and reported as a single
+        :class:`SynthesisError` after the loop completes — one broken TTS
+        call does not abort the entire step.
+        """
         model = self._load_tts_model()
         lang = TTS_LANG_MAP.get(state.target_language, "auto")
         total = len(state.segments)
+        max_attempts = self.settings.tts_max_retries + 1
 
         # Pre-compute ref text map to avoid O(N²) scans
         ref_text_map = {s.id: _find_ref_text_for_speaker(state.segments, s) for s in state.speakers}
 
+        failed: list[tuple[int, str]] = []
         progress = create_progress()
         try:
             with progress:
@@ -163,15 +171,41 @@ class SynthesizeStep(PipelineStep):
                     ref_path = refs.get(seg.speaker)
                     ref_text = ref_text_map.get(seg.speaker, "")
 
-                    audio = self._run_tts(model, text, ref_path, ref_text, lang)
-                    self._save_wav(audio, raw_path, self.settings.tts_sample_rate)
-                    seg.synth_path = raw_path.name
+                    last_err: Exception | None = None
+                    for attempt in range(1, max_attempts + 1):
+                        try:
+                            audio = self._run_tts(model, text, ref_path, ref_text, lang)
+                            self._save_wav(audio, raw_path, self.settings.tts_sample_rate)
+                            seg.synth_path = raw_path.name
+                            last_err = None
+                            break
+                        except Exception as exc:
+                            last_err = exc
+                            if attempt < max_attempts:
+                                log_warning(
+                                    f"TTS attempt {attempt}/{max_attempts} failed "
+                                    f"for segment {seg.id}: {exc} — retrying"
+                                )
+
+                    if last_err is not None:
+                        failed.append((seg.id, str(last_err)))
+                        log_warning(
+                            f"TTS permanently failed for segment {seg.id} "
+                            f"after {max_attempts} attempts: {last_err}"
+                        )
+
                     progress.advance(task)
         finally:
             # If not managed, free manually
             if self.model_manager is None:
                 del model
                 gc.collect()
+
+        if failed:
+            ids = [str(seg_id) for seg_id, _ in failed]
+            raise SynthesisError(
+                f"TTS failed for {len(failed)} segment(s) after retries: {', '.join(ids)}"
+            )
 
     def _postprocess_segments(self, state: PipelineState) -> None:
         """Speed-adjust and normalize each synthesized segment.
