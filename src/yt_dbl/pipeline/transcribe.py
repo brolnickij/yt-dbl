@@ -39,7 +39,10 @@ def _first_key(
     """Return value of the first matching key, cast to *cast*, or None."""
     for key in keys:
         if key in seg:
-            return cast(seg[key])
+            try:
+                return cast(seg[key])
+            except (ValueError, TypeError):
+                return None
     return None
 
 

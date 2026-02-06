@@ -191,6 +191,21 @@ class TestNormaliseASRSegments:
         segs = TranscribeStep._normalise_asr_segments(result)
         assert segs[0]["speaker_id"] == 0
 
+    def test_string_speaker_id_falls_back_to_default(self) -> None:
+        """Non-numeric speaker_id (e.g. 'SPEAKER_00') falls back to 0."""
+        result = _fake_asr_result(
+            [{"start": 0.0, "end": 2.0, "speaker_id": "SPEAKER_00", "text": "Hello"}]
+        )
+        segs = TranscribeStep._normalise_asr_segments(result)
+        assert len(segs) == 1
+        assert segs[0]["speaker_id"] == 0
+
+    def test_numeric_string_speaker_id_casts_ok(self) -> None:
+        """Speaker ID like '2' (string of a number) should cast to int."""
+        result = _fake_asr_result([{"start": 0.0, "end": 1.0, "speaker_id": "2", "text": "Hi"}])
+        segs = TranscribeStep._normalise_asr_segments(result)
+        assert segs[0]["speaker_id"] == 2
+
 
 # ── Alignment tests ─────────────────────────────────────────────────────────
 
