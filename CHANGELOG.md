@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v1.3.0 (2026-02-06)
+
+### Documentation
+
+- Add --prerelease=allow to uv tool install instructions
+  ([`9d8466a`](https://github.com/brolnickij/yt-dbl/commit/9d8466a7b818947095fdcd07bebe875bc3a4c1e7))
+
+- Add PATH hint for uv tool install
+  ([`aba2733`](https://github.com/brolnickij/yt-dbl/commit/aba27337f8b2709e0a7b2c5c3c04d71dfebd9e9a))
+
+- Expand .env.example with all settings and update README config section
+  ([`1ed55e7`](https://github.com/brolnickij/yt-dbl/commit/1ed55e70c814dcd22b6dfe7a64563a2baa4d275d))
+
+- **readme**: Trim config table to key params, link to .env.example
+  ([`8ae79cd`](https://github.com/brolnickij/yt-dbl/commit/8ae79cda5dc15d3c022b032acb83a685ef3cbcd0))
+
+### Features
+
+- **cli**: Disable built-in completion options
+  ([`5ee2897`](https://github.com/brolnickij/yt-dbl/commit/5ee28974d16eb1f0a39478a96f5e1a41984c5300))
+
+- **transcribe**: Add chunked ASR for audio longer than 55 minutes
+  ([`ba010ce`](https://github.com/brolnickij/yt-dbl/commit/ba010ce011a3add4d46ab7988d538954f6bb4aa8))
+
+
 ## v1.2.0 (2026-02-06)
 
 ### Bug Fixes
