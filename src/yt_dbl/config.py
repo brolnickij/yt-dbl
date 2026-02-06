@@ -119,6 +119,10 @@ class Settings(BaseSettings):
     separation_segment_size: int = Field(default=256, ge=64, le=512)
     separation_overlap: int = Field(default=8, ge=2, le=50)
     separation_batch_size: int = Field(default=0, ge=0, le=16)  # 0 = auto-detect
+    # NB: batch_size is ignored by audio-separator for Roformer models.
+    # FP16 mixed precision via audio-separator's native autocast
+    # (~1.5\u20132\u00d7 faster on Apple Silicon MPS):
+    separation_use_autocast: bool = True
 
     # ── Transcription ───────────────────────────────────────────────────────
     transcription_asr_model: str = "mlx-community/VibeVoice-ASR-bf16"
