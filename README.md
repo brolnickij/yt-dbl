@@ -100,71 +100,19 @@ Copy `.env.example` to `.env` and adjust as needed:
 cp .env.example .env
 ```
 
-### All parameters
+### Key parameters
+| Env variable | Default | Description |
+|---|---|---|
+| `YT_DBL_ANTHROPIC_API_KEY` | — | **Required.** Anthropic API key for translation |
+| `YT_DBL_TARGET_LANGUAGE` | `ru` | Target language (ISO 639-1) |
+| `YT_DBL_OUTPUT_FORMAT` | `mp4` | `mp4` / `mkv` |
+| `YT_DBL_SUBTITLE_MODE` | `softsub` | `softsub` / `hardsub` / `none` |
+| `YT_DBL_BACKGROUND_VOLUME` | `0.15` | Background volume during speech (0.0–1.0) |
+| `YT_DBL_MAX_SPEED_FACTOR` | `1.4` | Max TTS speed-up to fit timing (1.0–2.0) |
+| `YT_DBL_MAX_LOADED_MODELS` | `0` (auto) | Max models in memory (0 = auto by RAM) |
+| `YT_DBL_WORK_DIR` | `dubbed` | Output directory for all jobs |
 
-#### API keys
-| Parameter | Env variable | Default | Description |
-|---|---|---|---|
-| `anthropic_api_key` | `YT_DBL_ANTHROPIC_API_KEY` | — | **Required.** Anthropic API key for translation |
-| `hf_token` | `YT_DBL_HF_TOKEN` | — | HuggingFace token (only for gated models) |
-
-#### Pipeline
-| Parameter | Env variable | Default | Description |
-|---|---|---|---|
-| `target_language` | `YT_DBL_TARGET_LANGUAGE` | `ru` | Target language (ISO 639-1) |
-| `output_format` | `YT_DBL_OUTPUT_FORMAT` | `mp4` | `mp4` / `mkv` |
-| `subtitle_mode` | `YT_DBL_SUBTITLE_MODE` | `softsub` | `softsub` / `hardsub` / `none` |
-
-#### Audio
-| Parameter | Env variable | Default | Description |
-|---|---|---|---|
-| `background_volume` | `YT_DBL_BACKGROUND_VOLUME` | `0.15` | Background volume during speech (0.0–1.0) |
-| `background_ducking` | `YT_DBL_BACKGROUND_DUCKING` | `true` | Sidechain ducking of background during speech |
-| `max_speed_factor` | `YT_DBL_MAX_SPEED_FACTOR` | `1.4` | Max TTS speed-up to fit timing (1.0–2.0) |
-| `voice_ref_duration` | `YT_DBL_VOICE_REF_DURATION` | `7.0` | Voice reference clip duration for cloning (3–30 sec) |
-| `sample_rate` | `YT_DBL_SAMPLE_RATE` | `48000` | Audio sample rate for download & final output (Hz) |
-
-#### Separation (BS-RoFormer)
-| Parameter | Env variable | Default | Description |
-|---|---|---|---|
-| `separation_model` | `YT_DBL_SEPARATION_MODEL` | `model_bs_roformer_ep_317_sdr_12.9755.ckpt` | Separation model checkpoint |
-| `separation_segment_size` | `YT_DBL_SEPARATION_SEGMENT_SIZE` | `256` | Segment size (64–512, larger = more VRAM) |
-| `separation_overlap` | `YT_DBL_SEPARATION_OVERLAP` | `8` | Overlap between segments (2–50) |
-| `separation_batch_size` | `YT_DBL_SEPARATION_BATCH_SIZE` | `0` (auto) | Batch size (0 = auto by RAM). Ignored for Roformer |
-| `separation_use_autocast` | `YT_DBL_SEPARATION_USE_AUTOCAST` | `true` | FP16 mixed precision (~1.5–2x faster on MPS) |
-
-#### Transcription (VibeVoice-ASR)
-| Parameter | Env variable | Default | Description |
-|---|---|---|---|
-| `transcription_asr_model` | `YT_DBL_TRANSCRIPTION_ASR_MODEL` | `mlx-community/VibeVoice-ASR-4bit` | ASR + diarization model |
-| `transcription_aligner_model` | `YT_DBL_TRANSCRIPTION_ALIGNER_MODEL` | `mlx-community/Qwen3-ForcedAligner-0.6B-8bit` | Word-level alignment model |
-| `transcription_max_tokens` | `YT_DBL_TRANSCRIPTION_MAX_TOKENS` | `8192` | Max tokens for ASR generation (256–32768) |
-| `transcription_temperature` | `YT_DBL_TRANSCRIPTION_TEMPERATURE` | `0.0` | ASR sampling temperature (0.0 = greedy) |
-| `transcription_max_chunk_minutes` | `YT_DBL_TRANSCRIPTION_MAX_CHUNK_MINUTES` | `55.0` | Max duration per ASR chunk (5–59 min) |
-| `transcription_chunk_overlap_minutes` | `YT_DBL_TRANSCRIPTION_CHUNK_OVERLAP_MINUTES` | `2.0` | Overlap between ASR chunks (0.5–10 min) |
-
-#### Synthesis (Qwen3-TTS)
-| Parameter | Env variable | Default | Description |
-|---|---|---|---|
-| `tts_model` | `YT_DBL_TTS_MODEL` | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16` | TTS model with voice cloning |
-| `tts_temperature` | `YT_DBL_TTS_TEMPERATURE` | `0.9` | TTS sampling temperature |
-| `tts_top_k` | `YT_DBL_TTS_TOP_K` | `50` | Top-K sampling |
-| `tts_top_p` | `YT_DBL_TTS_TOP_P` | `1.0` | Top-P (nucleus) sampling |
-| `tts_repetition_penalty` | `YT_DBL_TTS_REPETITION_PENALTY` | `1.05` | Repetition penalty |
-| `tts_sample_rate` | `YT_DBL_TTS_SAMPLE_RATE` | `24000` | TTS native sample rate (Hz) |
-
-#### Translation
-| Parameter | Env variable | Default | Description |
-|---|---|---|---|
-| `claude_model` | `YT_DBL_CLAUDE_MODEL` | `claude-sonnet-4-5` | Anthropic model for translation |
-
-#### Models & paths
-| Parameter | Env variable | Default | Description |
-|---|---|---|---|
-| `max_loaded_models` | `YT_DBL_MAX_LOADED_MODELS` | `0` (auto) | Max models in memory (0 = auto by RAM) |
-| `work_dir` | `YT_DBL_WORK_DIR` | `dubbed` | Output directory for all jobs |
-| `model_cache_dir` | `YT_DBL_MODEL_CACHE_DIR` | `~/.cache/yt-dbl/models` | HuggingFace model cache |
-| `ffmpeg_path` | `YT_DBL_FFMPEG_PATH` | — (auto) | Path to ffmpeg binary |
+> See [`.env.example`](.env.example) for the full list of 33 configurable parameters including model selection, separation tuning, TTS sampling, and chunked ASR settings.
 
 
 ## Quick start
