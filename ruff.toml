@@ -81,4 +81,5 @@ known-first-party = ["yt_dbl"]
     "PLC0415", # local imports OK in tests
     "PLW0603", # global statement OK in test conftest
     "PLW0108", # lambda wrappers OK in test helpers
+    "TC002",   # pytest is runtime dep in tests
 ]
