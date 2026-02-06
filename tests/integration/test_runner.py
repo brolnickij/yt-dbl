@@ -5,8 +5,11 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from tests.conftest import prefill_download
 from yt_dbl.config import Settings
+from yt_dbl.pipeline.base import StepValidationError
 from yt_dbl.pipeline.runner import PipelineRunner, load_state, save_state
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName, StepStatus
 
@@ -323,3 +326,28 @@ class TestPipelineRunner:
         assert result.started_at != ""
         assert result.finished_at != ""
         assert result.duration_sec >= 0.0
+
+
+class TestEarlyValidation:
+    def test_missing_api_key_raises(self, tmp_path: Path) -> None:
+        """Pipeline refuses to start when API key is missing and translate hasn't run."""
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="")
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state = prefill_download(state, cfg)
+
+        runner = PipelineRunner(cfg)
+        with pytest.raises(StepValidationError, match="Anthropic API key"):
+            runner.run(state)
+
+    def test_api_key_not_needed_when_translate_done(self, tmp_path: Path) -> None:
+        """If translate is already COMPLETED, no API key is required."""
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="")
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state = prefill_download(state, cfg)
+        state.get_step(StepName.TRANSLATE).status = StepStatus.COMPLETED
+
+        sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
+        runner = PipelineRunner(cfg)
+        with _pipeline_patches(sep_dir):
+            state = runner.run(state)
+        # Pipeline should run without raising
