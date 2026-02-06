@@ -16,7 +16,7 @@ from typing import Any
 from yt_dbl.config import settings
 from yt_dbl.utils.logging import get_metal_memory_mb, log_info, log_model_load, log_model_unload
 
-__all__ = ["ModelManager", "model_manager"]
+__all__ = ["ModelManager"]
 
 
 @dataclass
@@ -151,7 +151,3 @@ class ModelManager:
         from yt_dbl.utils.memory import cleanup_gpu_memory
 
         cleanup_gpu_memory()
-
-
-# Global singleton
-model_manager = ModelManager()
