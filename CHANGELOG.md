@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v1.2.0 (2026-02-06)
+
+### Bug Fixes
+
+- Add explicit transformers pre-release dep for uv tool install compatibility
+  ([`88375fc`](https://github.com/brolnickij/yt-dbl/commit/88375fcc323b8e4470ec7d84b49970eba50cc066))
+
+### Features
+
+- **config**: Add separation_use_autocast setting for FP16 mixed precision
+  ([`06caead`](https://github.com/brolnickij/yt-dbl/commit/06caead7c8f9a59cf54ba7f7da99bdbfca623264))
+
+### Performance Improvements
+
+- **separate**: Enable FP16 autocast and add inference timing
+  ([`f4d0cce`](https://github.com/brolnickij/yt-dbl/commit/f4d0ccec6af0972a8e446d42b2ea54395cd141c1))
+
+- **transcribe**: Switch VibeVoice-ASR from bf16 to 4bit quantization
+  ([`9101509`](https://github.com/brolnickij/yt-dbl/commit/9101509329a5a1fb795936f324e6d3dcea0993ea))
+
+### Testing
+
+- **separate**: Add tests for autocast config option
+  ([`3d0d75e`](https://github.com/brolnickij/yt-dbl/commit/3d0d75e07d1b055f2e7fc04f2f0b56376b06a723))
+
+
 ## v1.1.0 (2026-02-06)
 
 ### Chores

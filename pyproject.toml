@@ -1,6 +1,6 @@
 [project]
 name = "yt-dbl"
-version = "1.1.0"
+version = "1.2.0"
 description = "CLI tool for automatic YouTube video dubbing with voice cloning (Apple Silicon)"
 readme = "README.md"
 requires-python = ">=3.12"
