@@ -37,8 +37,9 @@ def _build_speech_track(
 ) -> np.ndarray:
     """Place synthesized WAV segments onto a timeline at original timecodes.
 
-    Each segment gets a short linear fade-in/fade-out to prevent clicks at
-    boundaries.  Segments that happen to overlap are additively mixed.
+    Each segment gets a short equal-power fade-in/fade-out to prevent
+    clicks at boundaries while maintaining constant energy.  Segments
+    that happen to overlap are additively mixed.
     """
     total_samples = int(total_duration * sample_rate) + sample_rate  # +1 s safety
     track = np.zeros(total_samples, dtype=np.float32)
@@ -62,10 +63,11 @@ def _build_speech_track(
             indices = np.linspace(0, len(data) - 1, new_len)
             data = np.interp(indices, np.arange(len(data)), data).astype(np.float32)
 
-        # Apply fade in/out
+        # Equal-power fade in/out (sin² curve keeps energy constant)
         if fade_samples > 0 and len(data) > fade_samples * 2:
-            fade_in = np.linspace(0, 1, fade_samples, dtype=np.float32)
-            fade_out = np.linspace(1, 0, fade_samples, dtype=np.float32)
+            t = np.linspace(0.0, np.pi / 2, fade_samples, dtype=np.float32)
+            fade_in = np.sin(t)
+            fade_out = np.cos(t)
             data[:fade_samples] *= fade_in
             data[-fade_samples:] *= fade_out
 
