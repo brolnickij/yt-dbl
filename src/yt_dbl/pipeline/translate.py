@@ -25,8 +25,11 @@ You are a professional dubbing translator. The translated text will be \
 read aloud by a TTS engine — optimize every translation for natural \
 spoken delivery.
 
+SOURCE: {source_language}
+TARGET: {target_language}
+
 RULES:
-1. Translate each segment naturally into {target_language}.
+1. Translate each segment naturally from {source_language} into {target_language}.
 2. Preserve the speaker's register, tone, and style — formal/informal, \
 technical jargon, humor, sarcasm, etc.
 3. Keep translations CONCISE — they must fit the original segment's \
@@ -158,7 +161,8 @@ class TranslateStep(PipelineStep):
             return self._load_cached(state, translations_path, srt_path)
 
         # Call Claude API
-        translations = self._translate(state.segments, state.target_language)
+        source_lang = state.source_language or "auto-detected"
+        translations = self._translate(state.segments, state.target_language, source_lang)
         log_info(f"Translated {len(translations)}/{len(state.segments)} segments")
 
         # Apply translations to segments
@@ -191,6 +195,7 @@ class TranslateStep(PipelineStep):
         self,
         segments: list[Segment],
         target_language: str,
+        source_language: str = "auto-detected",
     ) -> dict[int, str]:
         """Call Claude API with all segments and return translations."""
         from anthropic import Anthropic
@@ -203,6 +208,7 @@ class TranslateStep(PipelineStep):
         duration_hint = _build_duration_hint(segments)
         system_prompt = _SYSTEM_PROMPT.format(
             target_language=target_language,
+            source_language=source_language,
             duration_hint=duration_hint,
         )
         user_message = _build_user_message(segments)
