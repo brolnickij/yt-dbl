@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from yt_dbl.config import Settings
+    from yt_dbl.models.manager import ModelManager
     from yt_dbl.schemas import PipelineState, StepName
 
 
@@ -18,6 +19,7 @@ class PipelineStep(ABC):
     Each step:
       - receives the current PipelineState
       - has access to its own working directory
+      - can use the shared ModelManager for ML model lifecycle
       - writes outputs to that directory
       - updates PipelineState with results
     """
@@ -26,9 +28,15 @@ class PipelineStep(ABC):
     name: StepName
     description: str = ""
 
-    def __init__(self, settings: Settings, work_dir: Path) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        work_dir: Path,
+        model_manager: ModelManager | None = None,
+    ) -> None:
         self.settings = settings
         self.work_dir = work_dir
+        self.model_manager = model_manager
 
     @abstractmethod
     def run(self, state: PipelineState) -> PipelineState:
