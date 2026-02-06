@@ -209,9 +209,7 @@ class TranscribeStep(PipelineStep):
     # ── internals ───────────────────────────────────────────────────────────
 
     def _resolve_vocals(self, state: PipelineState) -> Path:
-        sep_outputs = state.get_step(StepName.SEPARATE).outputs
-        sep_dir = self.settings.step_dir(state.video_id, "02_separate")
-        return sep_dir / sep_outputs["vocals"]
+        return self.resolve_step_file(state, StepName.SEPARATE, "vocals")
 
     # ── ASR (VibeVoice-ASR) ─────────────────────────────────────────────────
 

@@ -159,12 +159,6 @@ class SeparateStep(PipelineStep):
     @staticmethod
     def _cleanup_gpu_memory() -> None:
         """Clear GPU/MPS caches if available."""
-        try:
-            import torch
+        from yt_dbl.utils.memory import cleanup_gpu_memory
 
-            if hasattr(torch, "mps") and torch.backends.mps.is_available():
-                torch.mps.empty_cache()
-            elif torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass
+        cleanup_gpu_memory()

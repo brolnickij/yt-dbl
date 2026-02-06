@@ -8,7 +8,6 @@ is reached.
 
 from __future__ import annotations
 
-import gc
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -152,27 +151,9 @@ class ModelManager:
     @staticmethod
     def _cleanup_memory() -> None:
         """Run garbage collection and clear GPU/Metal caches."""
-        gc.collect()
+        from yt_dbl.utils.memory import cleanup_gpu_memory
 
-        # MLX Metal cache (Apple Silicon)
-        try:
-            import mlx.core as mx
-
-            if hasattr(mx, "metal") and hasattr(mx.metal, "clear_cache"):
-                mx.metal.clear_cache()
-        except ImportError:
-            pass
-
-        # PyTorch MPS / CUDA cache (audio-separator uses torch)
-        try:
-            import torch
-
-            if hasattr(torch, "mps") and torch.backends.mps.is_available():
-                torch.mps.empty_cache()
-            elif torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass
+        cleanup_gpu_memory()
 
 
 # Global singleton

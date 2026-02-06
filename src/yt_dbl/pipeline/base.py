@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from yt_dbl.models.manager import ModelManager
     from yt_dbl.schemas import PipelineState, StepName
 
+from yt_dbl.schemas import STEP_DIRS
+
 
 class PipelineStep(ABC):
     """Base class every pipeline step must implement.
@@ -56,6 +58,21 @@ class PipelineStep(ABC):
 
         Raise ValueError with a clear message if something is missing.
         """
+
+    def resolve_step_file(
+        self,
+        state: PipelineState,
+        step: StepName,
+        output_key: str,
+    ) -> Path:
+        """Resolve a file path from a previous step's outputs.
+
+        Uses ``STEP_DIRS`` to build the correct directory without
+        hardcoding step directory names across the codebase.
+        """
+        step_result = state.get_step(step)
+        step_dir = self.settings.step_dir(state.video_id, STEP_DIRS[step])
+        return step_dir / step_result.outputs[output_key]
 
     @property
     def step_dir(self) -> Path:
