@@ -27,6 +27,48 @@ from yt_dbl.schemas import STEP_ORDER, StepName
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+
+# ── Memory measurement ──────────────────────────────────────────────────────
+
+
+def get_rss_mb() -> float:
+    """Return current process RSS in megabytes."""
+    try:
+        import resource  # noqa: PLC0415
+
+        # macOS/Linux: ru_maxrss is in bytes on Linux, kilobytes on macOS
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        import sys  # noqa: PLC0415
+
+        if sys.platform == "darwin":
+            return usage.ru_maxrss / (1024 * 1024)  # bytes → MB
+        return usage.ru_maxrss / 1024  # KB → MB
+    except ImportError:
+        return 0.0
+
+
+def get_metal_memory_mb() -> float:
+    """Return MLX Metal active memory in megabytes (0 if unavailable)."""
+    try:
+        import mlx.core as mx  # noqa: PLC0415
+
+        if hasattr(mx, "metal") and hasattr(mx.metal, "get_active_memory"):
+            return float(mx.metal.get_active_memory()) / (1024 * 1024)
+    except ImportError:
+        pass
+    return 0.0
+
+
+def log_memory_status() -> None:
+    """Print current memory usage."""
+    rss = get_rss_mb()
+    metal = get_metal_memory_mb()
+    parts = [f"  [info]Memory: RSS={rss:.0f} MB"]
+    if metal > 0:
+        parts.append(f"Metal={metal:.0f} MB")
+    console.print(", ".join(parts) + "[/info]")
+
+
 # ── Console ─────────────────────────────────────────────────────────────────
 
 theme = Theme(
@@ -98,12 +140,20 @@ def log_warning(msg: str) -> None:
     console.print(f"  [warning]⚠ {msg}[/warning]")
 
 
-def log_model_load(name: str) -> None:
-    console.print(f"  [model]↑ Loading model:[/model] {name}")
+def log_model_load(name: str, elapsed: float = 0.0, mem_delta_mb: float = 0.0) -> None:
+    parts = [f"  [model]↑ Loading model:[/model] {name}"]
+    if elapsed > 0:
+        parts.append(f"[info]({elapsed:.1f}s)[/info]")
+    if mem_delta_mb > 0:
+        parts.append(f"[info]+{mem_delta_mb:.0f} MB[/info]")
+    console.print(" ".join(parts))
 
 
-def log_model_unload(name: str) -> None:
-    console.print(f"  [model]↓ Unloading model:[/model] {name}")
+def log_model_unload(name: str, mem_freed_mb: float = 0.0) -> None:
+    parts = [f"  [model]↓ Unloading model:[/model] {name}"]
+    if mem_freed_mb > 0:
+        parts.append(f"[info]-{mem_freed_mb:.0f} MB[/info]")
+    console.print(" ".join(parts))
 
 
 # ── Progress bars ───────────────────────────────────────────────────────────
