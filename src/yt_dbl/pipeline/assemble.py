@@ -96,11 +96,17 @@ def _assemble_video(
     subtitle_path: Path | None = None,
     subtitle_mode: str = "softsub",
     output_format: str = "mp4",
+    background_ducking: bool = True,
 ) -> Path:
     """Combine video + speech + background [+ subtitles] in one ffmpeg call.
 
     Audio pipeline:
-      background → volume filter → amix with speech → AAC 320 kbps
+      background → volume → (optional sidechain duck) → mix with speech
+      → limiter → AAC 320 kbps
+
+    When *background_ducking* is enabled the background is compressed
+    (ducked) whenever speech is present, reducing interference from
+    imperfect vocal separation.
 
     Video stream is copied without re-encoding (unless hardsub mode).
     """
@@ -118,10 +124,27 @@ def _assemble_video(
         inputs += ["-i", str(subtitle_path)]
 
     # Audio filter: mix speech + attenuated background
-    filter_parts = [
-        f"[2:a]volume={background_volume:.2f}[bg]",
-        "[1:a][bg]amix=inputs=2:duration=longest:normalize=0[mixed]",
-    ]
+    if background_ducking:
+        # Sidechain ducking: reduce background when speech is active.
+        # asplit clones the speech stream — one copy feeds the sidechain
+        # detector, the other is mixed with the ducked background.
+        filter_parts = [
+            "[1:a]asplit[speech][sc]",
+            f"[2:a]volume={background_volume:.2f}[bg]",
+            ("[bg][sc]sidechaincompress=threshold=0.01:ratio=6:attack=50:release=800[ducked]"),
+            (
+                "[speech][ducked]amix=inputs=2:duration=longest:normalize=0,"
+                "alimiter=limit=0.95:level=false[mixed]"
+            ),
+        ]
+    else:
+        filter_parts = [
+            f"[2:a]volume={background_volume:.2f}[bg]",
+            (
+                "[1:a][bg]amix=inputs=2:duration=longest:normalize=0,"
+                "alimiter=limit=0.95:level=false[mixed]"
+            ),
+        ]
 
     # Hardsub: burn subtitles into video (requires re-encode)
     if has_subs and subtitle_mode == "hardsub":
@@ -235,6 +258,7 @@ class AssembleStep(PipelineStep):
             subtitle_path=subtitle_path,
             subtitle_mode=self.settings.subtitle_mode,
             output_format=self.settings.output_format,
+            background_ducking=self.settings.background_ducking,
         )
 
         result = state.get_step(self.name)

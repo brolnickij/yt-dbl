@@ -108,6 +108,7 @@ class Settings(BaseSettings):
 
     # ── Audio ───────────────────────────────────────────────────────────────
     background_volume: float = Field(default=0.15, ge=0.0, le=1.0)
+    background_ducking: bool = True  # reduce background when speech is active
     max_speed_factor: float = Field(default=1.4, ge=1.0, le=2.0)
     voice_ref_duration: float = Field(default=7.0, ge=3.0, le=30.0)
     sample_rate: int = 48000

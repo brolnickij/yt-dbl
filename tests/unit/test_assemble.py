@@ -309,10 +309,12 @@ class TestAssembleVideo:
             assert args[idx + 1] == "copy"
             # Subtitle codec
             assert "mov_text" in args
-            # Audio filter with volume
+            # Audio filter with ducking + limiter
             fc_idx = args.index("-filter_complex")
             fc = args[fc_idx + 1]
             assert "volume=0.15" in fc
+            assert "sidechaincompress" in fc
+            assert "alimiter" in fc
             assert "amix" in fc
 
     def test_softsub_mkv(self, tmp_path: Path) -> None:
@@ -378,6 +380,24 @@ class TestAssembleVideo:
             # Only 3 inputs (no subtitle)
             assert args.count("-i") == 3
             assert "-c:s" not in args
+
+    def test_ducking_disabled(self, tmp_path: Path) -> None:
+        """With ducking off, no sidechaincompress but limiter is still present."""
+        with patch("yt_dbl.pipeline.assemble.run_ffmpeg") as mock_ff:
+            _assemble_video(
+                video_path=tmp_path / "v.mp4",
+                speech_path=tmp_path / "s.wav",
+                background_path=tmp_path / "bg.wav",
+                output_path=tmp_path / "out.mp4",
+                background_volume=0.15,
+                background_ducking=False,
+            )
+            args = mock_ff.call_args[0][0]
+            fc_idx = args.index("-filter_complex")
+            fc = args[fc_idx + 1]
+            assert "sidechaincompress" not in fc
+            assert "alimiter" in fc
+            assert "amix" in fc
 
     def test_missing_subtitle_file(self, tmp_path: Path) -> None:
         """Falls back gracefully if subtitle file doesn't exist."""

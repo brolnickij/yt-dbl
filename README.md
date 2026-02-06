@@ -6,5 +6,6 @@ CLI tool for YouTube video dubbing with voice cloning.
 
 ```bash
 uv sync
-yt-dbl dub <youtube-url>
+
+uv run yt-dbl dub "https://www.youtube.com/watch?v=TmSbTceDAlU" -t ru
 ```
