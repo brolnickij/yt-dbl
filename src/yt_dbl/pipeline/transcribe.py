@@ -280,13 +280,26 @@ class TranscribeStep(PipelineStep):
 
     # ── Forced alignment (Qwen3-ForcedAligner) ──────────────────────────────
 
+    # Padding (seconds) added around each segment when slicing audio for
+    # alignment.  Prevents cutting off speech at boundaries.
+    _ALIGN_PAD_SEC: float = 0.5
+    # ForcedAligner expects 16 kHz mono audio.
+    _ALIGNER_SAMPLE_RATE: int = 16_000
+
     def _run_alignment(
         self,
         vocals_path: Path,
         raw_segments: list[dict[str, Any]],
         detected_lang: str = "en",
     ) -> list[Segment]:
-        """Run Qwen3-ForcedAligner for word-level timestamps."""
+        """Run Qwen3-ForcedAligner for word-level timestamps.
+
+        Performance optimisation: the audio file is loaded into memory
+        **once** and each segment is sliced from the in-memory array
+        before being passed to the aligner.  This avoids re-reading the
+        full file from disk and computing the mel-spectrogram over the
+        entire recording for every segment.
+        """
         aligner_name = self.settings.transcription_aligner_model
 
         if self.model_manager is not None:
@@ -301,6 +314,10 @@ class TranscribeStep(PipelineStep):
 
         lang_full = _ALIGNER_LANGUAGE_MAP.get(detected_lang, "English")
 
+        # Load the whole audio file once (16 kHz mono mx.array)
+        audio_array = self._load_audio_array(vocals_path)
+        total_samples = audio_array.shape[0]
+
         segments: list[Segment] = []
 
         progress = create_progress()
@@ -312,7 +329,24 @@ class TranscribeStep(PipelineStep):
                     progress.advance(task)
                     continue
 
-                words = self._align_segment(aligner, vocals_path, seg, lang_full)
+                # Slice audio for this segment with padding
+                pad_samples = int(self._ALIGN_PAD_SEC * self._ALIGNER_SAMPLE_RATE)
+                start_sample = max(0, int(seg["start"] * self._ALIGNER_SAMPLE_RATE) - pad_samples)
+                end_sample = min(
+                    total_samples,
+                    int(seg["end"] * self._ALIGNER_SAMPLE_RATE) + pad_samples,
+                )
+                audio_slice = audio_array[start_sample:end_sample]
+                # Offset to add back to aligner timestamps (relative → absolute)
+                time_offset = start_sample / self._ALIGNER_SAMPLE_RATE
+
+                words = self._align_segment(
+                    aligner,
+                    audio_slice,
+                    seg,
+                    lang_full,
+                    time_offset=time_offset,
+                )
 
                 segments.append(
                     Segment(
@@ -335,20 +369,38 @@ class TranscribeStep(PipelineStep):
         return segments
 
     @staticmethod
+    def _load_audio_array(vocals_path: Path) -> Any:
+        """Load an audio file as a 16 kHz mono mx.array."""
+        from mlx_audio.stt.utils import load_audio
+
+        return load_audio(str(vocals_path), sr=16_000)
+
+    @staticmethod
     def _align_segment(
         aligner: Any,
-        vocals_path: Path,
+        audio: Any,
         seg: dict[str, Any],
         language: str,
+        *,
+        time_offset: float = 0.0,
     ) -> list[Word]:
-        """Align a single segment and return Word list."""
+        """Align a single segment and return Word list.
+
+        Parameters
+        ----------
+        audio
+            Pre-sliced mx.array (16 kHz mono) covering this segment.
+        time_offset
+            Seconds to add to every returned timestamp so that word
+            times are in the coordinate system of the full recording.
+        """
         text = seg["text"].strip()
         if not text:
             return []
 
         try:
             result = aligner.generate(
-                audio=str(vocals_path),
+                audio=audio,
                 text=text,
                 language=language,
             )
@@ -362,7 +414,13 @@ class TranscribeStep(PipelineStep):
             start = item.start_time if hasattr(item, "start_time") else item["start_time"]
             end = item.end_time if hasattr(item, "end_time") else item["end_time"]
             word_text = item.text if hasattr(item, "text") else item["text"]
-            words.append(Word(text=str(word_text), start=float(start), end=float(end)))
+            words.append(
+                Word(
+                    text=str(word_text),
+                    start=float(start) + time_offset,
+                    end=float(end) + time_offset,
+                )
+            )
 
         return words
 

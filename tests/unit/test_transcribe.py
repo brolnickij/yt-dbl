@@ -201,7 +201,7 @@ class TestAlignSegment:
 
         words = TranscribeStep._align_segment(
             aligner,
-            vocals_path=MagicMock(),
+            audio=MagicMock(),
             seg={"text": "Hello world", "start": 0.0, "end": 3.5, "speaker_id": 0},
             language="English",
         )
@@ -215,7 +215,7 @@ class TestAlignSegment:
         aligner = MagicMock()
         words = TranscribeStep._align_segment(
             aligner,
-            vocals_path=MagicMock(),
+            audio=MagicMock(),
             seg={"text": "  ", "start": 0.0, "end": 1.0, "speaker_id": 0},
             language="English",
         )
@@ -228,7 +228,7 @@ class TestAlignSegment:
 
         words = TranscribeStep._align_segment(
             aligner,
-            vocals_path=MagicMock(),
+            audio=MagicMock(),
             seg={"text": "Fallback text", "start": 1.0, "end": 2.0, "speaker_id": 0},
             language="English",
         )
@@ -236,6 +236,26 @@ class TestAlignSegment:
         assert len(words) == 1
         assert words[0].text == "Fallback text"
         assert words[0].confidence == 0.5
+
+    def test_align_applies_time_offset(self) -> None:
+        """Word timestamps are shifted by time_offset (audio slice → absolute)."""
+        aligner = MagicMock()
+        # Aligner returns timestamps relative to slice start (0.0)
+        aligner.generate.return_value = _make_align_result(["Hello", "world"], 0.0, 3.0)
+
+        offset = 10.0
+        words = TranscribeStep._align_segment(
+            aligner,
+            audio=MagicMock(),
+            seg={"text": "Hello world", "start": 10.0, "end": 13.0, "speaker_id": 0},
+            language="English",
+            time_offset=offset,
+        )
+
+        assert len(words) == 2
+        # All timestamps should be shifted by offset
+        assert words[0].start == pytest.approx(0.0 + offset)
+        assert words[1].start == pytest.approx(1.5 + offset)
 
 
 # ── Language detection tests ────────────────────────────────────────────────
