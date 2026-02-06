@@ -13,7 +13,7 @@ import json
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from yt_dbl.pipeline.base import PipelineStep
+from yt_dbl.pipeline.base import PipelineStep, StepValidationError
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, Word
 from yt_dbl.utils.logging import console, create_progress, log_info, suppress_library_noise
 
@@ -160,7 +160,7 @@ class TranscribeStep(PipelineStep):
     def validate_inputs(self, state: PipelineState) -> None:
         sep = state.get_step(StepName.SEPARATE)
         if "vocals" not in sep.outputs:
-            raise ValueError("No vocals file from separation step")
+            raise StepValidationError("No vocals file from separation step")
 
     # ── public API ──────────────────────────────────────────────────────────
 

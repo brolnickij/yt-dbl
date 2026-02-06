@@ -132,7 +132,7 @@ class TestE2EDownload:
 
     def test_invalid_url_raises(self, e2e_work_dir: Path) -> None:
         """DownloadError should be raised for a bogus URL."""
-        from yt_dbl.pipeline.download import DownloadError
+        from yt_dbl.pipeline.base import DownloadError
 
         step, _cfg, state = self._make(
             e2e_work_dir,

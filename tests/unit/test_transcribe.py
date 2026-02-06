@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from yt_dbl.config import Settings
+from yt_dbl.pipeline.base import StepValidationError
 from yt_dbl.pipeline.transcribe import (
     _ALIGNER_LANGUAGE_MAP,
     SEGMENTS_FILE,
@@ -115,7 +116,7 @@ class TestTranscribeStepValidation:
     def test_validate_missing_vocals(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         state.get_step(StepName.SEPARATE).outputs = {}
-        with pytest.raises(ValueError, match="No vocals file"):
+        with pytest.raises(StepValidationError, match="No vocals file"):
             step.validate_inputs(state)
 
     def test_validate_ok(self, tmp_path: Path) -> None:

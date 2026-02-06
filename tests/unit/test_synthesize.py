@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from yt_dbl.config import Settings
+from yt_dbl.pipeline.base import StepValidationError
 from yt_dbl.pipeline.synthesize import (
     SYNTH_META_FILE,
     SynthesizeStep,
@@ -138,26 +139,26 @@ class TestSynthesizeStepValidation:
     def test_validate_no_segments(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         state.segments = []
-        with pytest.raises(ValueError, match="No segments"):
+        with pytest.raises(StepValidationError, match="No segments"):
             step.validate_inputs(state)
 
     def test_validate_no_translated_text(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         for seg in state.segments:
             seg.translated_text = ""
-        with pytest.raises(ValueError, match="no translated text"):
+        with pytest.raises(StepValidationError, match="no translated text"):
             step.validate_inputs(state)
 
     def test_validate_no_vocals(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         state.get_step(StepName.SEPARATE).outputs = {}
-        with pytest.raises(ValueError, match="No vocals"):
+        with pytest.raises(StepValidationError, match="No vocals"):
             step.validate_inputs(state)
 
     def test_validate_no_speakers(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         state.speakers = []
-        with pytest.raises(ValueError, match="No speakers"):
+        with pytest.raises(StepValidationError, match="No speakers"):
             step.validate_inputs(state)
 
     def test_validate_ok(self, tmp_path: Path) -> None:

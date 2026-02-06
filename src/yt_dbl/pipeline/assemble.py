@@ -15,7 +15,7 @@ import numpy as np
 import soundfile as sf
 from scipy.signal import resample_poly
 
-from yt_dbl.pipeline.base import PipelineStep
+from yt_dbl.pipeline.base import PipelineStep, StepValidationError
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName
 from yt_dbl.utils.audio import get_audio_duration, run_ffmpeg
 from yt_dbl.utils.logging import log_info
@@ -206,13 +206,13 @@ class AssembleStep(PipelineStep):
     def validate_inputs(self, state: PipelineState) -> None:
         synth = state.get_step(StepName.SYNTHESIZE)
         if not synth.outputs:
-            raise ValueError("No synthesized segments")
+            raise StepValidationError("No synthesized segments")
         dl = state.get_step(StepName.DOWNLOAD)
         if "video" not in dl.outputs:
-            raise ValueError("No video file from download step")
+            raise StepValidationError("No video file from download step")
         sep = state.get_step(StepName.SEPARATE)
         if "background" not in sep.outputs:
-            raise ValueError("No background audio from separation step")
+            raise StepValidationError("No background audio from separation step")
 
     # ── public API ──────────────────────────────────────────────────────────
 

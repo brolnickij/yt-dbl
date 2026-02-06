@@ -6,22 +6,18 @@ import gc
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from yt_dbl.pipeline.base import PipelineStep
+from yt_dbl.pipeline.base import PipelineStep, SeparationError, StepValidationError
 from yt_dbl.schemas import STEP_DIRS, StepName
 from yt_dbl.utils.logging import log_info, log_warning
 
 if TYPE_CHECKING:
     from yt_dbl.schemas import PipelineState
 
-__all__ = ["SeparateStep", "SeparationError"]
+__all__ = ["SeparateStep"]
 
 # Stem labels used by audio-separator
 _VOCALS_LABEL = "Vocals"
 _INSTRUMENTAL_LABEL = "Instrumental"
-
-
-class SeparationError(Exception):
-    """Raised when audio separation fails."""
 
 
 class SeparateStep(PipelineStep):
@@ -34,10 +30,10 @@ class SeparateStep(PipelineStep):
     def validate_inputs(self, state: PipelineState) -> None:
         dl = state.get_step(StepName.DOWNLOAD)
         if "audio" not in dl.outputs:
-            raise ValueError("No audio file from download step")
+            raise StepValidationError("No audio file from download step")
         audio_path = self._get_audio_path(state)
         if not audio_path.exists():
-            raise ValueError(f"Audio file not found: {audio_path}")
+            raise StepValidationError(f"Audio file not found: {audio_path}")
 
     def run(self, state: PipelineState) -> PipelineState:
         vocals_path = self.step_dir / self.VOCALS_FILENAME

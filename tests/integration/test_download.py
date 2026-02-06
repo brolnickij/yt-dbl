@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from yt_dbl.config import Settings
-from yt_dbl.pipeline.download import DownloadError, DownloadStep
+from yt_dbl.pipeline.base import DownloadError, StepValidationError
+from yt_dbl.pipeline.download import DownloadStep
 from yt_dbl.schemas import PipelineState, StepName
 
 if TYPE_CHECKING:
@@ -39,7 +40,7 @@ class TestDownloadStep:
     def test_validate_inputs_no_url(self, tmp_path: Path) -> None:
         step, _, state = self._make_step(tmp_path)
         state.url = ""
-        with pytest.raises(ValueError, match="No URL"):
+        with pytest.raises(StepValidationError, match="No URL"):
             step.validate_inputs(state)
 
     def test_validate_inputs_ok(self, tmp_path: Path) -> None:

@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from yt_dbl.config import Settings
-from yt_dbl.pipeline.separate import SeparateStep, SeparationError
+from yt_dbl.pipeline.base import SeparationError, StepValidationError
+from yt_dbl.pipeline.separate import SeparateStep
 from yt_dbl.schemas import PipelineState, StepName, StepStatus
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ class TestSeparateStepValidation:
     def test_validate_missing_audio_output(self, tmp_path: Path) -> None:
         step, _, state = self._make(tmp_path)
         # download step has no outputs
-        with pytest.raises(ValueError, match="No audio file"):
+        with pytest.raises(StepValidationError, match="No audio file"):
             step.validate_inputs(state)
 
     def test_validate_audio_file_not_found(self, tmp_path: Path) -> None:
@@ -35,7 +36,7 @@ class TestSeparateStepValidation:
         dl.status = StepStatus.COMPLETED
         dl.outputs = {"video": "video.mp4", "audio": "audio.wav"}
         # File doesn't actually exist on disk
-        with pytest.raises(ValueError, match="Audio file not found"):
+        with pytest.raises(StepValidationError, match="Audio file not found"):
             step.validate_inputs(state)
 
     def test_validate_ok(self, tmp_path: Path) -> None:

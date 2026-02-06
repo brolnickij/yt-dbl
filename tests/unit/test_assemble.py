@@ -17,6 +17,7 @@ from yt_dbl.pipeline.assemble import (
     _assemble_video,
     _build_speech_track,
 )
+from yt_dbl.pipeline.base import StepValidationError
 from yt_dbl.schemas import (
     PipelineState,
     Segment,
@@ -145,19 +146,19 @@ class TestAssembleValidation:
     def test_validate_no_synth_outputs(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         state.get_step(StepName.SYNTHESIZE).outputs = {}
-        with pytest.raises(ValueError, match="No synthesized segments"):
+        with pytest.raises(StepValidationError, match="No synthesized segments"):
             step.validate_inputs(state)
 
     def test_validate_no_video(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         state.get_step(StepName.DOWNLOAD).outputs = {}
-        with pytest.raises(ValueError, match="No video file"):
+        with pytest.raises(StepValidationError, match="No video file"):
             step.validate_inputs(state)
 
     def test_validate_no_background(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         state.get_step(StepName.SEPARATE).outputs = {}
-        with pytest.raises(ValueError, match="No background audio"):
+        with pytest.raises(StepValidationError, match="No background audio"):
             step.validate_inputs(state)
 
     def test_validate_ok(self, tmp_path: Path) -> None:

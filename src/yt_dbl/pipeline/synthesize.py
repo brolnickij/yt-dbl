@@ -13,7 +13,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any
 
-from yt_dbl.pipeline.base import PipelineStep
+from yt_dbl.pipeline.base import PipelineStep, StepValidationError, SynthesisError
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName
 from yt_dbl.utils.audio import get_audio_duration
 from yt_dbl.utils.audio_processing import (
@@ -79,14 +79,14 @@ class SynthesizeStep(PipelineStep):
 
     def validate_inputs(self, state: PipelineState) -> None:
         if not state.segments:
-            raise ValueError("No segments to synthesize")
+            raise StepValidationError("No segments to synthesize")
         if not any(seg.translated_text for seg in state.segments):
-            raise ValueError("Segments have no translated text")
+            raise StepValidationError("Segments have no translated text")
         sep = state.get_step(StepName.SEPARATE)
         if "vocals" not in sep.outputs:
-            raise ValueError("No vocals file from separation step")
+            raise StepValidationError("No vocals file from separation step")
         if not state.speakers:
-            raise ValueError("No speakers detected — run transcribe first")
+            raise StepValidationError("No speakers detected — run transcribe first")
 
     # ── public API ──────────────────────────────────────────────────────────
 
@@ -323,7 +323,7 @@ class SynthesizeStep(PipelineStep):
         results = list(model.generate(**kwargs))
         if not results:
             msg = f"TTS returned no audio for text: {text[:50]}"
-            raise RuntimeError(msg)
+            raise SynthesisError(msg)
 
         # Concatenate if multiple chunks
         audio_chunks = [r.audio for r in results]

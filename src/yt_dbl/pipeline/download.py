@@ -6,7 +6,7 @@ import json
 import subprocess
 from typing import TYPE_CHECKING, Any
 
-from yt_dbl.pipeline.base import PipelineStep
+from yt_dbl.pipeline.base import DownloadError, PipelineStep, StepValidationError
 from yt_dbl.schemas import PipelineState, StepName, VideoMeta
 from yt_dbl.utils.audio import extract_audio
 from yt_dbl.utils.logging import create_progress, log_info
@@ -15,17 +15,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-class DownloadError(Exception):
-    """Raised when yt-dlp fails to download."""
-
-
 class DownloadStep(PipelineStep):
     name = StepName.DOWNLOAD
     description = "Download video + extract audio"
 
     def validate_inputs(self, state: PipelineState) -> None:
         if not state.url:
-            raise ValueError("No URL provided")
+            raise StepValidationError("No URL provided")
 
     def run(self, state: PipelineState) -> PipelineState:
         video_path = self.step_dir / "video.mp4"

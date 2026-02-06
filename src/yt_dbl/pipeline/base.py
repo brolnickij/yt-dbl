@@ -1,4 +1,4 @@
-"""Abstract base class for pipeline steps."""
+"""Abstract base class for pipeline steps and exception hierarchy."""
 
 from __future__ import annotations
 
@@ -13,6 +13,40 @@ if TYPE_CHECKING:
     from yt_dbl.schemas import PipelineState, StepName
 
 from yt_dbl.schemas import STEP_DIRS
+
+# ── Exception hierarchy ─────────────────────────────────────────────────────
+
+
+class PipelineStepError(Exception):
+    """Base exception for all pipeline step errors."""
+
+
+class StepValidationError(PipelineStepError):
+    """Raised when a step's ``validate_inputs`` check fails."""
+
+
+class DownloadError(PipelineStepError):
+    """Raised when video or audio download fails."""
+
+
+class SeparationError(PipelineStepError):
+    """Raised when audio separation fails."""
+
+
+class TranscriptionError(PipelineStepError):
+    """Raised when speech transcription or alignment fails."""
+
+
+class TranslationError(PipelineStepError):
+    """Raised when API translation fails or returns invalid data."""
+
+
+class SynthesisError(PipelineStepError):
+    """Raised when TTS voice synthesis fails."""
+
+
+class AssemblyError(PipelineStepError):
+    """Raised when final video assembly fails."""
 
 
 class PipelineStep(ABC):
@@ -56,7 +90,7 @@ class PipelineStep(ABC):
     def validate_inputs(self, state: PipelineState) -> None:  # noqa: B027
         """Optional: validate that required inputs exist before running.
 
-        Raise ValueError with a clear message if something is missing.
+        Raise ``StepValidationError`` with a clear message if something is missing.
         """
 
     def resolve_step_file(

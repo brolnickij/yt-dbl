@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from yt_dbl.pipeline.base import PipelineStep
+from yt_dbl.pipeline.base import PipelineStep, StepValidationError, TranslationError
 from yt_dbl.schemas import PipelineState, Segment, StepName
 from yt_dbl.utils.logging import log_info
 
@@ -101,7 +101,7 @@ def _parse_translations(response_text: str) -> dict[int, str]:
 
     items = json.loads(text)
     if not isinstance(items, list):
-        raise TypeError("Expected a JSON array from Claude")
+        raise TranslationError("Expected a JSON array from Claude")
 
     result: dict[int, str] = {}
     for item in items:
@@ -145,9 +145,9 @@ class TranslateStep(PipelineStep):
 
     def validate_inputs(self, state: PipelineState) -> None:
         if not state.segments:
-            raise ValueError("No segments to translate")
+            raise StepValidationError("No segments to translate")
         if not self.settings.anthropic_api_key:
-            raise ValueError("Anthropic API key required — set YT_DBL_ANTHROPIC_API_KEY")
+            raise StepValidationError("Anthropic API key required — set YT_DBL_ANTHROPIC_API_KEY")
 
     # ── public API ──────────────────────────────────────────────────────────
 
@@ -225,7 +225,7 @@ class TranslateStep(PipelineStep):
         first_block = response.content[0]
         if not hasattr(first_block, "text"):  # pragma: no cover
             msg = f"Unexpected content block type: {type(first_block)}"
-            raise TypeError(msg)
+            raise TranslationError(msg)
         response_text: str = first_block.text
         log_info(
             f"Claude response: {response.usage.input_tokens} in / "

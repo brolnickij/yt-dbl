@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from yt_dbl.config import Settings
+from yt_dbl.pipeline.base import StepValidationError, TranslationError
 from yt_dbl.pipeline.translate import (
     SUBTITLES_FILE,
     TRANSLATIONS_FILE,
@@ -100,7 +101,7 @@ class TestTranslateStepValidation:
     def test_validate_missing_segments(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
         state.segments = []
-        with pytest.raises(ValueError, match="No segments to translate"):
+        with pytest.raises(StepValidationError, match="No segments to translate"):
             step.validate_inputs(state)
 
     def test_validate_missing_api_key(self, tmp_path: Path) -> None:
@@ -113,7 +114,7 @@ class TestTranslateStepValidation:
         step = TranslateStep(settings=cfg, work_dir=step_dir)
         state = PipelineState(video_id="test123")
         state.segments = _make_segments()
-        with pytest.raises(ValueError, match="Anthropic API key"):
+        with pytest.raises(StepValidationError, match="Anthropic API key"):
             step.validate_inputs(state)
 
     def test_validate_ok(self, tmp_path: Path) -> None:
@@ -175,7 +176,7 @@ class TestParseTranslations:
             _parse_translations("not json at all")
 
     def test_parse_non_array_raises(self) -> None:
-        with pytest.raises(TypeError, match="JSON array"):
+        with pytest.raises(TranslationError, match="JSON array"):
             _parse_translations('{"id": 0, "translated_text": "test"}')
 
 
