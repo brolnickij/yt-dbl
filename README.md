@@ -1,81 +1,82 @@
 # yt-dbl
+CLI-инструмент для автоматического дубляжа YouTube-видео с клонированием голоса
 
-CLI-инструмент для автоматического дубляжа YouTube-видео с клонированием голоса.
-
-Весь ML-inference (ASR, alignment, TTS) выполняется локально на Apple Silicon через [MLX](https://github.com/ml-explore/mlx). Для перевода используется Claude API. Результат — видеофайл с озвучкой голосом оригинального спикера на целевом языке.
+Весь ML-inference (ASR, alignment, TTS) выполняется локально на Apple Silicon через [MLX](https://github.com/ml-explore/mlx). Для перевода используется Claude API. Результат — видеофайл с озвучкой голосом оригинального спикера на целевом языке
 
 ## Как это работает
-
 ```
-  YouTube URL
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│  1. DOWNLOAD                                                │
-│  yt-dlp → video.mp4 → ffmpeg → audio.wav (48 kHz, mono)    │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                     video.mp4 + audio.wav
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  2. SEPARATE                                                │
-│  BS-RoFormer (audio-separator, ONNX + CoreML)               │
-│  audio.wav → vocals.wav + background.wav                    │
-└──────────┬──────────────────────────────────┬───────────────┘
-           │                                  │
-      vocals.wav                       background.wav
-           │                                  │
-           ▼                                  │
-┌─────────────────────────────────────────┐   │
-│  3. TRANSCRIBE                          │   │
-│  VibeVoice-ASR (MLX, ~8 GB)            │   │
-│    → сегменты + speaker diarization     │   │
-│  Qwen3-ForcedAligner (MLX, ~600 MB)    │   │
-│    → word-level timestamps              │   │
-│  + автодетект языка (Unicode-анализ)    │   │
-└──────────────────┬──────────────────────┘   │
-                   │                          │
-     сегменты [{text, start, end, speaker,    │
-                words[], language}]            │
-                   │                          │
-                   ▼                          │
-┌─────────────────────────────────────────┐   │
-│  4. TRANSLATE                           │   │
-│  Claude Opus 4.6 (API, single-pass)     │   │
-│    → переведённые сегменты              │   │
-│    → subtitles.srt                      │   │
-└──────────────────┬──────────────────────┘   │
-                   │                          │
-                   ▼                          │
-┌─────────────────────────────────────────┐   │
-│  5. SYNTHESIZE                          │   │
-│  Qwen3-TTS (MLX, ~1.7 GB)              │   │
-│    voice cloning по ref-фрагменту       │   │
-│    → raw WAV на каждый сегмент          │   │
-│  Postprocessing (параллельно):          │   │
-│    speed-up (rubberband / atempo)       │   │
-│    loudnorm (-16 LUFS, 2-pass)          │   │
-│    de-essing                            │   │
-└──────────────────┬──────────────────────┘   │
-                   │                          │
-          segment_*.wav                       │
-                   │                          │
-                   ▼                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  6. ASSEMBLE                                                │
-│  speech track (crossfade 50 ms, equal-power)                │
-│    + background (sidechain ducking)                         │
-│    + video (copy) + subtitles (softsub/hardsub)             │
-│  → single ffmpeg call → result.mp4                          │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-                          result.mp4
+                        ┌────────────────┐
+                        │  YouTube URL   │
+                        └───────┬────────┘
+                                │
+                                ▼
+                ┌───────────────────────────────┐
+                │  1. DOWNLOAD                  │
+                │  yt-dlp → video.mp4           │
+                │  ffmpeg  → audio.wav (48 kHz) │
+                └───────────────┬───────────────┘
+                                │
+                                ▼
+                ┌───────────────────────────────┐
+                │  2. SEPARATE                  │
+                │  BS-RoFormer (ONNX + CoreML)  │
+                │  audio.wav →                  │
+                │    vocals.wav + background.wav│
+                └───────┬───────────────┬───────┘
+                        │               │
+                   vocals.wav     background.wav
+                        │               │
+                        ▼               │
+                ┌───────────────────┐   │
+                │  3. TRANSCRIBE    │   │
+                │  VibeVoice-ASR    │   │
+                │    (MLX, ~8 GB)   │   │
+                │  + ForcedAligner  │   │
+                │    (MLX, ~600 MB) │   │
+                │  → сегменты,      │   │
+                │    спикеры,       │   │
+                │    слова с        │   │
+                │    таймкодами     │   │
+                └─────────┬─────────┘   │
+                          │             │
+                          ▼             │
+                ┌───────────────────┐   │
+                │  4. TRANSLATE     │   │
+                │  Claude Opus 4.6  │   │
+                │  (API)            │   │
+                │  → перевод        │   │
+                │  → subtitles.srt  │   │
+                └─────────┬─────────┘   │
+                          │             │
+                          ▼             │
+                ┌───────────────────┐   │
+                │  5. SYNTHESIZE    │   │
+                │  Qwen3-TTS        │   │
+                │    (MLX, ~1.7 GB) │   │
+                │  voice cloning    │   │
+                │  + speed-up       │   │
+                │  + loudnorm       │   │
+                │  + de-essing      │   │
+                └─────────┬─────────┘   │
+                          │             │
+                 segment_*.wav          │
+                          │             │
+                          ▼             ▼
+                ┌───────────────────────────────┐
+                │  6. ASSEMBLE                  │
+                │  speech + background + video  │
+                │  + sidechain ducking          │
+                │  + субтитры (soft/hardsub)    │
+                │  → single ffmpeg call         │
+                └───────────────┬───────────────┘
+                                │
+                                ▼
+                        ┌───────────────┐
+                        │  result.mp4   │
+                        └───────────────┘
 ```
 
 ### Управление памятью
-
 ML-модели загружаются и выгружаются через LRU-менеджер. Количество одновременно загруженных моделей определяется автоматически по объёму RAM:
 
 ```
@@ -90,7 +91,6 @@ RAM              Моделей    Batch (separation)
 ASR-модель (~8 GB) выгружается перед загрузкой Aligner, чтобы не держать оба в памяти.
 
 ### Структура рабочей директории
-
 ```
 work/
 └── <video_id>/
@@ -117,7 +117,6 @@ work/
 ```
 
 ## Требования
-
 - **macOS** с **Apple Silicon** (M1/M2/M3/M4) — MLX работает только на Metal
 - **Python** ≥ 3.11
 - **FFmpeg** — автодетект; предпочитает `ffmpeg-full` (Homebrew) для поддержки rubberband
@@ -125,7 +124,6 @@ work/
 - **Anthropic API key** — для перевода через Claude
 
 ## Установка
-
 ```bash
 git clone <repo-url> && cd yt-dbl
 uv sync
@@ -138,7 +136,6 @@ brew install ffmpeg-full
 ```
 
 ### Предварительная загрузка моделей
-
 Модели скачиваются автоматически при первом запуске, но можно загрузить заранее (~10.5 GB):
 
 ```bash
@@ -146,7 +143,6 @@ uv run yt-dbl models download
 ```
 
 ## Быстрый старт
-
 ```bash
 # Дублировать видео на русский (по умолчанию)
 uv run yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID"
@@ -165,7 +161,6 @@ uv run yt-dbl resume VIDEO_ID
 ```
 
 ## Команды
-
 ### `dub` — дублирование видео
 
 ```bash
@@ -184,7 +179,6 @@ uv run yt-dbl dub <URL> [опции]
 | `--format` | Формат выхода: `mp4` / `mkv` | `mp4` |
 
 ### `resume` — продолжить прерванный дубляж
-
 ```bash
 uv run yt-dbl resume <video_id> [--max-models N]
 ```
@@ -192,7 +186,6 @@ uv run yt-dbl resume <video_id> [--max-models N]
 Пайплайн сохраняет `state.json` после каждого шага. При прерывании `resume` продолжит с последнего незавершённого шага.
 
 ### `status` — статус задачи
-
 ```bash
 uv run yt-dbl status <video_id>
 ```
@@ -200,7 +193,6 @@ uv run yt-dbl status <video_id>
 Выводит таблицу с состоянием каждого шага (`pending` / `running` / `completed` / `failed`), временем выполнения и метаданными видео.
 
 ### `models list` — список ML-моделей
-
 ```bash
 uv run yt-dbl models list
 ```
@@ -208,7 +200,6 @@ uv run yt-dbl models list
 Показывает все модели, их статус загрузки и размер на диске.
 
 ### `models download` — предварительное скачивание моделей
-
 ```bash
 uv run yt-dbl models download
 ```
@@ -216,7 +207,6 @@ uv run yt-dbl models download
 Загружает все HuggingFace-модели. Модель audio-separator скачивается автоматически при первом использовании.
 
 ## Конфигурация
-
 Настройки загружаются в порядке приоритета:
 
 1. Аргументы CLI
@@ -239,7 +229,6 @@ YT_DBL_SAMPLE_RATE=48000
 ```
 
 ### Все параметры
-
 | Параметр | Env-переменная | По умолчанию | Описание |
 |---|---|---|---|
 | `target_language` | `YT_DBL_TARGET_LANGUAGE` | `ru` | Целевой язык |
@@ -254,7 +243,6 @@ YT_DBL_SAMPLE_RATE=48000
 | `work_dir` | `YT_DBL_WORK_DIR` | `work` | Рабочая директория |
 
 ## Используемые модели
-
 | Модель | Размер | Задача | Inference |
 |---|---|---|---|
 | [VibeVoice-ASR](https://huggingface.co/mlx-community/VibeVoice-ASR-bf16) | ~8.2 GB | ASR + speaker diarization | MLX (Metal) |
@@ -264,13 +252,12 @@ YT_DBL_SAMPLE_RATE=48000
 | Claude Opus 4.6 | — | Перевод текста | API (Anthropic) |
 
 ### Поддерживаемые языки
-
 **TTS (синтез):** русский, английский, немецкий, французский, испанский, итальянский, португальский, китайский, японский, корейский, арабский, хинди, турецкий, нидерландский, польский, украинский.
 
 **ASR (распознавание):** автодетект по Unicode-скриптам (латиница, кириллица, арабица, деванагари, CJK и др.).
 
-## Разработка
 
+## Разработка
 ```bash
 just check          # lint + format + typecheck + tests
 just test           # быстрые тесты (parallel, coverage)
@@ -280,5 +267,4 @@ just format         # auto-format
 ```
 
 ## Лицензия
-
 MIT
