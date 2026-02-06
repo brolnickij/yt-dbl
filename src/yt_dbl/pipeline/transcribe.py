@@ -42,6 +42,40 @@ _ALIGNER_LANGUAGE_MAP: dict[str, str] = {
     "sv": "Swedish",
     "vi": "Vietnamese",
     "th": "Thai",
+    "id": "Indonesian",
+    "ms": "Malay",
+    "fi": "Finnish",
+    "da": "Danish",
+    "no": "Norwegian",
+    "ro": "Romanian",
+    "hu": "Hungarian",
+    "el": "Greek",
+    "he": "Hebrew",
+    "bg": "Bulgarian",
+    "hr": "Croatian",
+    "sr": "Serbian",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "et": "Estonian",
+    "ka": "Georgian",
+    "fa": "Persian",
+    "ur": "Urdu",
+    "bn": "Bengali",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "mr": "Marathi",
+    "gu": "Gujarati",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "sw": "Swahili",
+    "af": "Afrikaans",
+    "ca": "Catalan",
+    "eu": "Basque",
+    "gl": "Galician",
+    "cy": "Welsh",
+    "is": "Icelandic",
 }
 
 SEGMENTS_FILE = "segments.json"
@@ -110,6 +144,11 @@ class TranscribeStep(PipelineStep):
         raw_segments = self._run_asr(vocals_path)
         log_info(f"ASR produced {len(raw_segments)} segments")
 
+        # Detect source language and store in state
+        detected_lang = self._detect_language(raw_segments)
+        state.source_language = detected_lang
+        log_info(f"Detected source language: {detected_lang}")
+
         # Step 2: word-level alignment
         segments = self._run_alignment(vocals_path, raw_segments)
         log_info(f"Alignment complete: {sum(len(s.words) for s in segments)} words")
@@ -139,12 +178,18 @@ class TranscribeStep(PipelineStep):
 
     def _run_asr(self, vocals_path: Path) -> list[dict[str, Any]]:
         """Run VibeVoice-ASR and return parsed segment dicts."""
-        from mlx_audio.stt.utils import load as load_stt_model
-
         model_name = self.settings.transcription_asr_model
-        log_info(f"Loading ASR model: {model_name}")
-        with suppress_library_noise():
-            model = load_stt_model(model_name)
+
+        if self.model_manager is not None:
+            # Register loader if not yet registered
+            if model_name not in self.model_manager.registered_names:
+                self.model_manager.register(
+                    model_name,
+                    loader=lambda name=model_name: self._load_stt(name),
+                )
+            model = self.model_manager.get(model_name)
+        else:
+            model = self._load_stt(model_name)
 
         with console.status(
             "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
@@ -159,11 +204,21 @@ class TranscribeStep(PipelineStep):
         # VibeVoice key names vary across versions
         raw_segments = self._normalise_asr_segments(result)
 
-        # Free GPU memory
-        del model
-        gc.collect()
+        # If not managed, free manually
+        if self.model_manager is None:
+            del model
+            gc.collect()
 
         return raw_segments
+
+    @staticmethod
+    def _load_stt(model_name: str) -> Any:
+        """Load an STT model with noise suppression."""
+        from mlx_audio.stt.utils import load as load_stt_model
+
+        log_info(f"Loading model: {model_name}")
+        with suppress_library_noise():
+            return load_stt_model(model_name)
 
     @staticmethod
     def _normalise_asr_segments(result: Any) -> list[dict[str, Any]]:
@@ -192,12 +247,17 @@ class TranscribeStep(PipelineStep):
         raw_segments: list[dict[str, Any]],
     ) -> list[Segment]:
         """Run Qwen3-ForcedAligner for word-level timestamps."""
-        from mlx_audio.stt.utils import load as load_stt_model
-
         aligner_name = self.settings.transcription_aligner_model
-        log_info(f"Loading aligner model: {aligner_name}")
-        with suppress_library_noise():
-            aligner = load_stt_model(aligner_name)
+
+        if self.model_manager is not None:
+            if aligner_name not in self.model_manager.registered_names:
+                self.model_manager.register(
+                    aligner_name,
+                    loader=lambda name=aligner_name: self._load_stt(name),
+                )
+            aligner = self.model_manager.get(aligner_name)
+        else:
+            aligner = self._load_stt(aligner_name)
 
         # Determine language for aligner
         lang_full = _ALIGNER_LANGUAGE_MAP.get(self._detect_language(raw_segments), "English")
@@ -228,9 +288,10 @@ class TranscribeStep(PipelineStep):
                 )
                 progress.advance(task)
 
-        # Free GPU memory
-        del aligner
-        gc.collect()
+        # If not managed, free manually
+        if self.model_manager is None:
+            del aligner
+            gc.collect()
 
         return segments
 
@@ -268,13 +329,33 @@ class TranscribeStep(PipelineStep):
 
     @staticmethod
     def _detect_language(raw_segments: list[dict[str, Any]]) -> str:
-        """Best-effort language detection from segment text."""
+        """Best-effort language detection from segment text.
+
+        Inspects Unicode script ranges to identify the dominant writing system.
+        Falls back to 'en' for Latin-script languages (which VibeVoice handles
+        well regardless).
+        """
         all_text = " ".join(s.get("text", "") for s in raw_segments)
+
+        # Count characters in various scripts
         cyrillic = sum(1 for c in all_text if "\u0400" <= c <= "\u04ff")
         latin = sum(1 for c in all_text if "a" <= c.lower() <= "z")
+        arabic = sum(1 for c in all_text if "\u0600" <= c <= "\u06ff")
+        devanagari = sum(1 for c in all_text if "\u0900" <= c <= "\u097f")
+        thai = sum(1 for c in all_text if "\u0e00" <= c <= "\u0e7f")
 
-        if cyrillic > latin:
-            return "ru"
+        # Build script→language mapping for detection
+        script_counts: dict[str, int] = {
+            "ru": cyrillic,
+            "ar": arabic,
+            "hi": devanagari,
+            "th": thai,
+        }
+        # Pick highest non-Latin script if it beats Latin
+        best_script = max(script_counts, key=script_counts.get)  # type: ignore[arg-type]
+        if script_counts[best_script] > latin:
+            return best_script
+
         # Check Japanese kana BEFORE CJK (kanji are shared with Chinese)
         if any("\u3040" <= c <= "\u309f" or "\u30a0" <= c <= "\u30ff" for c in all_text):
             return "ja"
