@@ -29,6 +29,7 @@ dependencies = [
     "yt-dlp>=2026.2",
     "audio-separator[cpu]>=0.41.1",
     "mlx-audio>=0.3.1; sys_platform == 'darwin'",
+    "transformers>=5.0.0rc3; sys_platform == 'darwin'",
     "soundfile>=0.13",
     "scipy>=1.14",
     "anthropic>=0.78",

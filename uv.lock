@@ -2534,6 +2534,7 @@ dependencies = [
     { name = "rich" },
     { name = "scipy" },
     { name = "soundfile" },
+    { name = "transformers", marker = "sys_platform == 'darwin'" },
     { name = "typer" },
     { name = "yt-dlp" },
 ]
@@ -2560,6 +2561,7 @@ requires-dist = [
     { name = "rich", specifier = ">=14.3.2" },
     { name = "scipy", specifier = ">=1.14" },
     { name = "soundfile", specifier = ">=0.13" },
+    { name = "transformers", marker = "sys_platform == 'darwin'", specifier = ">=5.0.0rc3" },
     { name = "typer", specifier = ">=0.21.1" },
     { name = "yt-dlp", specifier = ">=2026.2" },
 ]
