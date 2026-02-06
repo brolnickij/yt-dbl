@@ -16,43 +16,66 @@ All ML inference (ASR, alignment, TTS) runs locally on Apple Silicon via [MLX](h
 
 
 ## Requirements
+
 - **macOS** with **Apple Silicon** (M1/M2/M3/M4) — MLX only works on Metal
-- **Python** >= 3.11
-- **FFmpeg** — auto-detected; prefers `ffmpeg-full` (Homebrew) for rubberband support
-- **yt-dlp** — video downloading
+- **Python** >= 3.12
+- **FFmpeg** — used for audio extraction, post-processing, and final assembly
+- **yt-dlp** — used to download videos from YouTube
 - **Anthropic API key** — for translation via Claude
 
 
 ## Installation
-
+### 1. Install system dependencies
 ```bash
-# Install globally (recommended)
+# FFmpeg (required)
+brew install ffmpeg
+
+# yt-dlp (required)
+brew install yt-dlp
+```
+
+> **Optional:** for pitch-preserving speed-up via rubberband, install `ffmpeg-full` instead:
+> ```bash
+> brew install ffmpeg-full
+> ```
+> Without it, the tool falls back to ffmpeg's `atempo` filter (works fine, just no pitch correction).
+
+### 2. Install yt-dbl
+```bash
+# From PyPI (recommended)
 uv tool install yt-dbl
 
 # Or with pipx
 pipx install yt-dbl
 ```
 
-### From source
+<details>
+<summary>From source</summary>
+
 ```bash
 git clone git@github.com:brolnickij/yt-dbl.git && cd yt-dbl
 uv sync
 ```
 
-Set the API key (required for the translation step):
+When running from source, use `uv run yt-dbl` instead of `yt-dbl`.
+</details>
+
+### 3. Set up the API key
+The Anthropic API key is required for the translation step. Add it to your shell profile so it persists across sessions:
 
 ```bash
-export YT_DBL_ANTHROPIC_API_KEY="sk-ant-..."
+echo 'export YT_DBL_ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.zshrc
+source ~/.zshrc
 ```
 
-Optional: install `ffmpeg-full` for pitch-preserving speed-up (rubberband):
+Or create a `.env` file in the working directory:
 
-```bash
-brew install ffmpeg-full
+```env
+YT_DBL_ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-### Pre-downloading models
-Models are downloaded automatically on first run, but you can fetch them ahead of time (~10.5 GB):
+### 4. Pre-download models (optional)
+Models (~10.5 GB) are downloaded automatically on first run. To fetch them ahead of time:
 
 ```bash
 yt-dbl models download
