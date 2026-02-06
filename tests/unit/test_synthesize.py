@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -101,14 +101,21 @@ def _make_step(tmp_path: Path) -> tuple[SynthesizeStep, Settings, PipelineState]
     return step, cfg, state
 
 
-def _fake_tts_result() -> MagicMock:
-    """Create a fake TTS generation result."""
+def _fake_run_tts(
+    _self: object, _model: object, _text: object, _ref: object, _ref_text: object, _lang: object
+) -> Any:
+    """Return a plain numpy array instead of mlx array."""
     import numpy as np
 
-    result = MagicMock()
-    result.audio = np.zeros(24000, dtype=np.float32)  # 1 second at 24kHz
-    result.sample_rate = 24000
-    return result
+    return np.zeros(24000, dtype=np.float32)
+
+
+def _fake_save_wav(_self: object, _audio: object, path: Path, _sr: object) -> None:
+    """Write a minimal WAV file without mlx dependency."""
+    import numpy as np
+    import soundfile as sf
+
+    sf.write(str(path), np.zeros(24000, dtype=np.float32), 24000)
 
 
 # ── Validation tests ────────────────────────────────────────────────────────
@@ -285,15 +292,21 @@ class TestPersistence:
 class TestSynthesizeStepRun:
     def test_run_success(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
-        fake_result = _fake_tts_result()
 
         mock_model = MagicMock()
-        mock_model.generate.return_value = [fake_result]
 
         with (
             patch(
                 "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
                 return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _fake_run_tts,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
             ),
             patch(
                 "yt_dbl.pipeline.synthesize.run_ffmpeg",
@@ -322,15 +335,21 @@ class TestSynthesizeStepRun:
 
     def test_run_with_speedup(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
-        fake_result = _fake_tts_result()
 
         mock_model = MagicMock()
-        mock_model.generate.return_value = [fake_result]
 
         with (
             patch(
                 "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
                 return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _fake_run_tts,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
             ),
             patch(
                 "yt_dbl.pipeline.synthesize.run_ffmpeg",
