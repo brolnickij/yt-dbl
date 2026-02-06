@@ -1,6 +1,45 @@
 # CHANGELOG
 
 
+## v1.5.0 (2026-02-06)
+
+### Bug Fixes
+
+- **synthesize**: Handle thread pool errors in postprocessing gracefully
+  ([`455da3d`](https://github.com/brolnickij/yt-dbl/commit/455da3d19e655f86df690140d66519efeb5b3f35))
+
+### Chores
+
+- Bump uv.lock
+  ([`67f7279`](https://github.com/brolnickij/yt-dbl/commit/67f727980ec8cf3d3eaa2f6856f095df2a4f49a6))
+
+### Documentation
+
+- **config**: Explain object.__setattr__ in model_validator
+  ([`6194bef`](https://github.com/brolnickij/yt-dbl/commit/6194bef75bcbd62e0957df931012c7848a2c2582))
+
+### Features
+
+- **synthesize**: Add per-segment TTS retry with configurable max retries
+  ([`4df96ef`](https://github.com/brolnickij/yt-dbl/commit/4df96ef6e9b7b25999c2fd76d84ff79ce4de419d))
+
+### Refactoring
+
+- **models**: Add Protocol types for ML models instead of Any
+  ([`1e9de13`](https://github.com/brolnickij/yt-dbl/commit/1e9de134fcad7f1380db7ec24a4e2e54d4c33bba))
+
+- **transcribe**: Use Hungarian algorithm for speaker reconciliation
+  ([`a14268c`](https://github.com/brolnickij/yt-dbl/commit/a14268cea185334b8bc8c9bfdcf5ce33b27b49d2))
+
+- **translate**: Extract system prompt to external template file
+  ([`2c63266`](https://github.com/brolnickij/yt-dbl/commit/2c632663866efa2fb1c3d2c553f25cd72d1b1429))
+
+### Testing
+
+- Ignore type checking for lambda in model registration
+  ([`6419919`](https://github.com/brolnickij/yt-dbl/commit/64199199d4bcd7cabcca59cde795c9be9d049903))
+
+
 ## v1.4.1 (2026-02-06)
 
 ### Bug Fixes
