@@ -263,37 +263,22 @@ class TestAlignSegment:
 
 
 class TestLanguageDetection:
-    def test_english(self) -> None:
-        segs = [{"text": "Hello world, this is a test."}]
-        assert TranscribeStep._detect_language(segs) == "en"
-
-    def test_russian(self) -> None:
-        segs = [{"text": "Привет мир, это тест."}]
-        assert TranscribeStep._detect_language(segs) == "ru"
-
-    def test_chinese(self) -> None:
-        segs = [{"text": "你好世界"}]
-        assert TranscribeStep._detect_language(segs) == "zh"
-
-    def test_japanese(self) -> None:
-        segs = [{"text": "こんにちは世界"}]
-        assert TranscribeStep._detect_language(segs) == "ja"
-
-    def test_korean(self) -> None:
-        segs = [{"text": "안녕하세요 세계"}]
-        assert TranscribeStep._detect_language(segs) == "ko"
-
-    def test_arabic(self) -> None:
-        segs = [{"text": "مرحبا بالعالم"}]
-        assert TranscribeStep._detect_language(segs) == "ar"
-
-    def test_hindi(self) -> None:
-        segs = [{"text": "नमस्ते दुनिया"}]
-        assert TranscribeStep._detect_language(segs) == "hi"
-
-    def test_thai(self) -> None:
-        segs = [{"text": "สวัสดีชาวโลก"}]
-        assert TranscribeStep._detect_language(segs) == "th"
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Hello world, this is a test.", "en"),
+            ("Привет мир, это тест.", "ru"),
+            ("你好世界", "zh"),
+            ("こんにちは世界", "ja"),
+            ("안녕하세요 세계", "ko"),
+            ("مرحبا بالعالم", "ar"),
+            ("नमस्ते दुनिया", "hi"),
+            ("สวัสดีชาวโลก", "th"),
+        ],
+        ids=["english", "russian", "chinese", "japanese", "korean", "arabic", "hindi", "thai"],
+    )
+    def test_detects_language(self, text: str, expected: str) -> None:
+        assert TranscribeStep._detect_language([{"text": text}]) == expected
 
     def test_empty(self) -> None:
         assert TranscribeStep._detect_language([]) == "en"

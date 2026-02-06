@@ -94,15 +94,17 @@ class TestSeparatorCheck:
 
 
 class TestFormatSize:
-    def test_zero(self) -> None:
-        assert format_model_size(0) == "—"
-
-    def test_megabytes(self) -> None:
-        assert format_model_size(500 * 1024 * 1024) == "500 MB"
-
-    def test_gigabytes(self) -> None:
-        result = format_model_size(int(1.5 * 1024**3))
-        assert "1.5 GB" in result
+    @pytest.mark.parametrize(
+        ("size", "expected"),
+        [
+            (0, "—"),
+            (500 * 1024 * 1024, "500 MB"),
+            (int(1.5 * 1024**3), "1.5 GB"),
+        ],
+        ids=["zero", "megabytes", "gigabytes"],
+    )
+    def test_format(self, size: int, expected: str) -> None:
+        assert expected in format_model_size(size)
 
 
 class TestHFCacheDir:
