@@ -8,10 +8,12 @@ soft-subtitles — all in a single ffmpeg call.
 
 from __future__ import annotations
 
+from math import gcd
 from typing import TYPE_CHECKING
 
 import numpy as np
 import soundfile as sf
+from scipy.signal import resample_poly
 
 from yt_dbl.pipeline.base import PipelineStep
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName
@@ -58,10 +60,9 @@ def _build_speech_track(
 
         # Resample if needed (normally 48 kHz after loudnorm)
         if sr != sample_rate:
-            ratio = sample_rate / sr
-            new_len = int(len(data) * ratio)
-            indices = np.linspace(0, len(data) - 1, new_len)
-            data = np.interp(indices, np.arange(len(data)), data).astype(np.float32)
+            up = sample_rate // gcd(sample_rate, sr)
+            down = sr // gcd(sample_rate, sr)
+            data = resample_poly(data, up, down).astype(np.float32)
 
         # Equal-power fade in/out (sin² curve keeps energy constant)
         if fade_samples > 0 and len(data) > fade_samples * 2:
