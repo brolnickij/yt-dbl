@@ -151,6 +151,7 @@ class PipelineState(BaseModel):
     video_id: str
     url: str = ""
     target_language: str = "ru"
+    source_language: str = ""  # auto-detected after transcription
     meta: VideoMeta | None = None
     segments: list[Segment] = Field(default_factory=list)
     speakers: list[Speaker] = Field(default_factory=list)
