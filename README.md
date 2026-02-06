@@ -256,12 +256,12 @@ Downloads all HuggingFace models. The `audio-separator` model is downloaded auto
 │  All in a single ffmpeg call                                                    │
 │                                                                                 │
 │  Output: result.mp4                                                             │
-└─────────────────────────────────────┬───────────────────────────────────────────┘
-                                      │
-                                      ▼
-                            ┌───────────────────┐
-                            │    result.mp4     │
-                            └───────────────────┘
+└──────────────────────────────────────────┬──────────────────────────────────────┘
+                                           │
+                                           ▼
+                                 ┌───────────────────┐
+                                 │    result.mp4     │
+                                 └───────────────────┘
 ```
 
 ### Memory management
