@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from yt_dbl.utils.memory import cleanup_gpu_memory
-
-_HAS_MLX = "mlx.core" in sys.modules or not pytest.importorskip(
-    "mlx.core", reason="mlx not installed"
-)
 
 
 class TestCleanupGpuMemory:
