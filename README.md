@@ -205,49 +205,49 @@ Downloads all HuggingFace models. The `audio-separator` model is downloaded auto
 │                                                                                 │
 │  BS-RoFormer splits audio into vocals and background (ONNX + CoreML)            │
 │  Output: vocals.wav, background.wav                                             │
-└──────────────────┬──────────────────────────────────────────┬───────────────────┘
-                   │                                          │
-              vocals.wav                                background.wav
-                   │                                          │
-                   ▼                                          │
-┌──────────────────────────────────────────────────────┐      │
-│  3. TRANSCRIBE                                       │      │
-│                                                      │      │
-│  VibeVoice-ASR (MLX, ~8 GB)                          │      │
-│    → speech segments + speaker diarization           │      │
-│  Qwen3-ForcedAligner (MLX, ~600 MB)                  │      │
-│    → word-level timestamps                           │      │
-│  + language auto-detection via Unicode scripts       │      │
-│                                                      │      │
-│  Output: segments.json                               │      │
-└──────────────────────────┬───────────────────────────┘      │
-                           │                                  │
-                           ▼                                  │
-┌──────────────────────────────────────────────────────┐      │
-│  4. TRANSLATE                                        │      │
-│                                                      │      │
-│  Claude API (single-pass, all segments at once)      │      │
-│  TTS-friendly output: short phrases, spelled-out     │      │
-│  numbers, no special characters                      │      │
-│                                                      │      │
-│  Output: translations.json, subtitles.srt            │      │
-└──────────────────────────┬───────────────────────────┘      │
-                           │                                  │
-                           ▼                                  │
-┌──────────────────────────────────────────────────────┐      │
-│  5. SYNTHESIZE                                       │      │
-│                                                      │      │
-│  Qwen3-TTS (MLX, ~1.7 GB) — voice cloning            │      │
-│  using a voice reference for each speaker            │      │
-│  Postprocessing (parallel, ThreadPool):              │      │
-│    • speed-up (rubberband or atempo)                 │      │
-│    • loudnorm (-16 LUFS, 2-pass)                     │      │
-│    • de-essing                                       │      │
-│                                                      │      │
-│  Output: segment_0000.wav, segment_0001.wav ...      │      │
-└──────────────────────────┬───────────────────────────┘      │
-                           │                                  │
-                           ▼                                  ▼
+└───────────────────────────┬────────────────────────────────────────────┬────────┘
+                            │                                            │
+                       vocals.wav                                  background.wav
+                            │                                            │
+                            ▼                                            │
+┌──────────────────────────────────────────────────────┐                 │
+│  3. TRANSCRIBE                                       │                 │
+│                                                      │                 │
+│  VibeVoice-ASR (MLX, ~8 GB)                          │                 │
+│    → speech segments + speaker diarization           │                 │
+│  Qwen3-ForcedAligner (MLX, ~600 MB)                  │                 │
+│    → word-level timestamps                           │                 │
+│  + language auto-detection via Unicode scripts       │                 │
+│                                                      │                 │
+│  Output: segments.json                               │                 │
+└──────────────────────────┬───────────────────────────┘                 │
+                           │                                             │
+                           ▼                                             │
+┌──────────────────────────────────────────────────────┐                 │
+│  4. TRANSLATE                                        │                 │
+│                                                      │                 │
+│  Claude API (single-pass, all segments at once)      │                 │
+│  TTS-friendly output: short phrases, spelled-out     │                 │
+│  numbers, no special characters                      │                 │
+│                                                      │                 │
+│  Output: translations.json, subtitles.srt            │                 │
+└──────────────────────────┬───────────────────────────┘                 │
+                           │                                             │
+                           ▼                                             │
+┌──────────────────────────────────────────────────────┐                 │
+│  5. SYNTHESIZE                                       │                 │
+│                                                      │                 │
+│  Qwen3-TTS (MLX, ~1.7 GB) — voice cloning            │                 │
+│  using a voice reference for each speaker            │                 │
+│  Postprocessing (parallel, ThreadPool):              │                 │
+│    • speed-up (rubberband or atempo)                 │                 │
+│    • loudnorm (-16 LUFS, 2-pass)                     │                 │
+│    • de-essing                                       │                 │
+│                                                      │                 │
+│  Output: segment_0000.wav, segment_0001.wav ...      │                 │
+└──────────────────────────┬───────────────────────────┘                 │
+                           │                                             │
+                           ▼                                             ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  6. ASSEMBLE                                                                    │
 │                                                                                 │
