@@ -14,6 +14,7 @@ from yt_dbl.pipeline.transcribe import (
     _ALIGNER_LANGUAGE_MAP,
     SEGMENTS_FILE,
     TranscribeStep,
+    _reference_score,
 )
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, StepStatus, Word
 
@@ -265,6 +266,67 @@ class TestLanguageDetection:
         assert TranscribeStep._detect_language([]) == "en"
 
 
+# ── Reference score tests ───────────────────────────────────────────────────
+
+
+class TestReferenceScore:
+    def test_high_confidence_long_segment(self) -> None:
+        seg = Segment(
+            id=0,
+            text="Hello world",
+            start=0.0,
+            end=5.0,
+            speaker="SPEAKER_00",
+            words=[
+                Word(text="Hello", start=0.0, end=2.5, confidence=1.0),
+                Word(text="world", start=2.5, end=5.0, confidence=1.0),
+            ],
+        )
+        # score = 1.0 * min(5.0, 8.0) = 5.0
+        assert _reference_score(seg) == pytest.approx(5.0)
+
+    def test_fallback_alignment_lowers_score(self) -> None:
+        seg = Segment(
+            id=0,
+            text="Fallback",
+            start=0.0,
+            end=6.0,
+            speaker="SPEAKER_00",
+            words=[Word(text="Fallback", start=0.0, end=6.0, confidence=0.5)],
+        )
+        # score = 0.5 * 6.0 = 3.0
+        assert _reference_score(seg) == pytest.approx(3.0)
+
+    def test_no_words_defaults_to_low_confidence(self) -> None:
+        seg = Segment(id=0, text="No words", start=0.0, end=4.0, speaker="SPEAKER_00")
+        # score = 0.5 * 4.0 = 2.0
+        assert _reference_score(seg) == pytest.approx(2.0)
+
+    def test_short_segment_penalised(self) -> None:
+        seg = Segment(
+            id=0,
+            text="Hi",
+            start=0.0,
+            end=2.0,
+            speaker="SPEAKER_00",
+            words=[Word(text="Hi", start=0.0, end=2.0, confidence=1.0)],
+        )
+        # score = 1.0 * 2.0 * 0.5(penalty) = 1.0
+        assert _reference_score(seg) == pytest.approx(1.0)
+
+    def test_very_long_segment_capped(self) -> None:
+        seg = Segment(
+            id=0,
+            text="Very long",
+            start=0.0,
+            end=20.0,
+            speaker="SPEAKER_00",
+            words=[Word(text="Very long", start=0.0, end=20.0, confidence=1.0)],
+        )
+        # score = 1.0 * 8.0(capped) = 8.0
+        assert _reference_score(seg) == pytest.approx(8.0)
+
+
 # ── Speaker extraction tests ────────────────────────────────────────────────
 
 
@@ -283,14 +345,70 @@ class TestExtractSpeakers:
         assert sp0.total_duration == pytest.approx(7.0, abs=0.01)
         assert sp1.total_duration == pytest.approx(2.0, abs=0.01)
 
-    def test_reference_is_longest_segment(self) -> None:
+    def test_reference_prefers_aligned_over_longest(self) -> None:
+        """A well-aligned segment scores higher than a longer fallback one."""
         segments = [
-            Segment(id=0, text="Short", start=0.0, end=1.0, speaker="SPEAKER_00"),
-            Segment(id=1, text="Long segment", start=2.0, end=8.0, speaker="SPEAKER_00"),
+            Segment(
+                id=0,
+                text="Well aligned segment",
+                start=0.0,
+                end=5.0,
+                speaker="SPEAKER_00",
+                words=[
+                    Word(text="Well", start=0.0, end=1.0, confidence=1.0),
+                    Word(text="aligned", start=1.0, end=2.5, confidence=1.0),
+                    Word(text="segment", start=2.5, end=5.0, confidence=1.0),
+                ],
+            ),
+            Segment(
+                id=1,
+                text="Longer but alignment failed completely",
+                start=5.0,
+                end=15.0,
+                speaker="SPEAKER_00",
+                words=[
+                    Word(
+                        text="Longer but alignment failed completely",
+                        start=5.0,
+                        end=15.0,
+                        confidence=0.5,
+                    ),
+                ],
+            ),
         ]
         speakers = TranscribeStep._extract_speakers(segments)
+        # Clean: 1.0 * 5.0 = 5.0  |  Fallback: 0.5 * 8.0(capped) = 4.0
+        assert speakers[0].reference_start == 0.0
+        assert speakers[0].reference_end == 5.0
+
+    def test_reference_penalises_very_short(self) -> None:
+        """Segments shorter than 3s get a penalty even with perfect confidence."""
+        segments = [
+            Segment(
+                id=0,
+                text="Tiny",
+                start=0.0,
+                end=1.5,
+                speaker="SPEAKER_00",
+                words=[Word(text="Tiny", start=0.0, end=1.5, confidence=1.0)],
+            ),
+            Segment(
+                id=1,
+                text="Decent length ok",
+                start=2.0,
+                end=6.0,
+                speaker="SPEAKER_00",
+                words=[
+                    Word(text="Decent", start=2.0, end=3.5, confidence=1.0),
+                    Word(text="length", start=3.5, end=4.5, confidence=1.0),
+                    Word(text="ok", start=4.5, end=6.0, confidence=1.0),
+                ],
+            ),
+        ]
+        speakers = TranscribeStep._extract_speakers(segments)
+        # Tiny: 1.0 * 1.5 * 0.5(penalty) = 0.75  |  Decent: 1.0 * 4.0 = 4.0
         assert speakers[0].reference_start == 2.0
-        assert speakers[0].reference_end == 8.0
+        assert speakers[0].reference_end == 6.0
 
 
 # ── Persistence (save/load) tests ──────────────────────────────────────────

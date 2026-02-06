@@ -117,6 +117,40 @@ def _normalise_one_segment(seg: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+# ── Reference segment scoring ───────────────────────────────────────────────
+
+# Minimum duration (seconds) for a reference to be "good".
+_MIN_REF_DURATION = 3.0
+# Duration above which extra length stops helping.
+_MAX_REF_DURATION = 8.0
+
+
+def _reference_score(seg: Segment) -> float:
+    """Score a segment for voice-reference quality.
+
+    The score balances two signals:
+      1. **Alignment confidence** - average ``Word.confidence`` across the
+         segment.  Successfully aligned words have 1.0; segments where
+         alignment failed fall back to 0.5 (see ``_align_segment``).
+      2. **Duration sweet-spot** - duration is clamped to
+         ``[0, _MAX_REF_DURATION]`` so very long (and potentially noisy)
+         segments are not artificially preferred.
+
+    A segment shorter than ``_MIN_REF_DURATION`` gets a small penalty
+    (halved score) because very short clips give the TTS too little
+    context for voice cloning.
+    """
+    avg_conf = sum(w.confidence for w in seg.words) / len(seg.words) if seg.words else 0.5
+
+    dur = min(seg.duration, _MAX_REF_DURATION)
+    score = avg_conf * dur
+
+    if seg.duration < _MIN_REF_DURATION:
+        score *= 0.5  # penalise very short segments
+
+    return score
+
+
 class TranscribeStep(PipelineStep):
     name = StepName.TRANSCRIBE
     description = "Transcribe + diarize speakers (VibeVoice-ASR + ForcedAligner)"
@@ -381,10 +415,11 @@ class TranscribeStep(PipelineStep):
 
         speakers: list[Speaker] = []
         for speaker_id, total_dur in sorted(durations.items()):
-            # Find a good reference segment (longest for this speaker)
+            # Pick the cleanest segment as voice reference.
+            # _reference_score balances alignment confidence and duration.
             best_seg = max(
                 (s for s in segments if s.speaker == speaker_id),
-                key=lambda s: s.duration,
+                key=_reference_score,
             )
             speakers.append(
                 Speaker(
