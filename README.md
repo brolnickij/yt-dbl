@@ -250,8 +250,8 @@ work/
     │   ├── segment_0000.wav        ← final segments (after postprocessing)
     │   ├── segment_0001.wav
     │   └── synth_meta.json         ← synthesis metadata
-    └── 06_assemble/
-        └── speech.wav              ← assembled speech track
+    ├── 06_assemble/
+    │   └── speech.wav              ← assembled speech track
     └── result.mp4                  ← final output (in job dir root)
 ```
 
