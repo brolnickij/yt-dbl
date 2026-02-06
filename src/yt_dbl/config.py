@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     separation_use_autocast: bool = True
 
     # ── Transcription ───────────────────────────────────────────────────────
-    transcription_asr_model: str = "mlx-community/VibeVoice-ASR-bf16"
+    transcription_asr_model: str = "mlx-community/VibeVoice-ASR-4bit"
     transcription_aligner_model: str = "mlx-community/Qwen3-ForcedAligner-0.6B-8bit"
     transcription_max_tokens: int = Field(default=8192, ge=256, le=32768)
     transcription_temperature: float = Field(default=0.0, ge=0.0, le=1.0)

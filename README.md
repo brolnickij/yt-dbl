@@ -217,7 +217,7 @@ Downloads all HuggingFace models. The `audio-separator` model is downloaded auto
 ┌──────────────────────────────────────────────────────┐                 │
 │  3. TRANSCRIBE                                       │                 │
 │                                                      │                 │
-│  VibeVoice-ASR (MLX, ~8 GB)                          │                 │
+│  VibeVoice-ASR (MLX, ~5.7 GB)                        │                 │
 │    → speech segments + speaker diarization           │                 │
 │  Qwen3-ForcedAligner (MLX, ~600 MB)                  │                 │
 │    → word-level timestamps                           │                 │
@@ -314,7 +314,7 @@ dubbed/
 ## Models
 | Model | Size | Task | Inference |
 |---|---|---|---|
-| [VibeVoice-ASR](https://huggingface.co/mlx-community/VibeVoice-ASR-bf16) | ~8.2 GB | ASR + speaker diarization | MLX (Metal) |
+| [VibeVoice-ASR](https://huggingface.co/mlx-community/VibeVoice-ASR-4bit) | ~5.7 GB | ASR + speaker diarization | MLX (Metal) |
 | [Qwen3-ForcedAligner](https://huggingface.co/mlx-community/Qwen3-ForcedAligner-0.6B-8bit) | ~600 MB | Word-level alignment | MLX (Metal) |
 | [Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16) | ~1.7 GB | TTS with voice cloning | MLX (Metal) |
 | MelBand-RoFormer (BS-RoFormer) | ~200 MB | Vocal/background separation | ONNX + CoreML |

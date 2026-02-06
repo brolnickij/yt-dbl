@@ -30,15 +30,15 @@ class TestModelRegistry:
 
     def test_registry_includes_core_models(self) -> None:
         repo_ids = {m.repo_id for m in MODEL_REGISTRY}
-        assert "mlx-community/VibeVoice-ASR-bf16" in repo_ids
+        assert "mlx-community/VibeVoice-ASR-4bit" in repo_ids
         assert "mlx-community/Qwen3-ForcedAligner-0.6B-8bit" in repo_ids
         assert "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16" in repo_ids
 
 
 class TestRepoDirName:
     def test_standard(self) -> None:
-        assert _repo_dir_name("mlx-community/VibeVoice-ASR-bf16") == (
-            "models--mlx-community--VibeVoice-ASR-bf16"
+        assert _repo_dir_name("mlx-community/VibeVoice-ASR-4bit") == (
+            "models--mlx-community--VibeVoice-ASR-4bit"
         )
 
     def test_simple(self) -> None:

@@ -25,7 +25,7 @@ __all__ = [
 class ModelInfo:
     """Metadata about a model used in the pipeline."""
 
-    repo_id: str  # HuggingFace repo, e.g. "mlx-community/VibeVoice-ASR-bf16"
+    repo_id: str  # HuggingFace repo, e.g. "mlx-community/VibeVoice-ASR-4bit"
     purpose: str  # e.g. "ASR + diarization"
     step: str  # Pipeline step that uses it
     approx_size: str  # Human-readable approximate size
@@ -34,10 +34,10 @@ class ModelInfo:
 # All models the pipeline uses
 MODEL_REGISTRY: list[ModelInfo] = [
     ModelInfo(
-        repo_id="mlx-community/VibeVoice-ASR-bf16",
+        repo_id="mlx-community/VibeVoice-ASR-4bit",
         purpose="ASR + speaker diarization",
         step="transcribe",
-        approx_size="~8.2 GB",
+        approx_size="~5.7 GB",
     ),
     ModelInfo(
         repo_id="mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
@@ -72,7 +72,7 @@ def _hf_cache_dir() -> Path:
 
 
 def _repo_dir_name(repo_id: str) -> str:
-    """Convert 'mlx-community/VibeVoice-ASR-bf16' → 'models--mlx-community--VibeVoice-ASR-bf16'."""
+    """Convert 'mlx-community/VibeVoice-ASR-4bit' → 'models--mlx-community--VibeVoice-ASR-4bit'."""
     return "models--" + repo_id.replace("/", "--")
 
 
