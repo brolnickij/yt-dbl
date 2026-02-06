@@ -36,6 +36,7 @@ A good translation should be speakable within that time window.
 5. Maintain consistency of terminology across all segments.
 6. Do NOT translate proper nouns, brand names, or technical terms that are \
 commonly kept in the original language.
+{stress_rule}\
 7. Return ONLY a JSON array of objects, each with "id" (int) and \
 "translated_text" (string). No extra commentary.
 
@@ -44,6 +45,16 @@ Example output:
   {{"id": 0, "translated_text": "Translated text here"}},
   {{"id": 1, "translated_text": "Another translation"}}
 ]
+"""
+
+# Languages where Unicode stress marks (U+0301) help TTS pronunciation
+_STRESS_LANGUAGES = {"ru", "uk"}
+
+_STRESS_RULE = """\
+7. IMPORTANT — stress marks: place the Unicode combining acute accent \
+(U+0301) on the vowel that carries primary stress in EVERY word of 2+ \
+syllables. Example: "Францу́зская прокурату́ра прово́дит обы́ски". \
+This is critical for correct TTS pronunciation. Do NOT skip stress marks.
 """
 
 
@@ -188,9 +199,11 @@ class TranslateStep(PipelineStep):
         )
 
         duration_hint = _build_duration_hint(segments)
+        stress_rule = _STRESS_RULE if target_language in _STRESS_LANGUAGES else ""
         system_prompt = _SYSTEM_PROMPT.format(
             target_language=target_language,
             duration_hint=duration_hint,
+            stress_rule=stress_rule,
         )
         user_message = _build_user_message(segments)
 

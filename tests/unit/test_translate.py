@@ -201,7 +201,7 @@ class TestSRTGeneration:
         content = srt_path.read_text(encoding="utf-8")
         assert "Привет, добро пожаловать." in content
         assert "00:00:00,000 --> 00:00:03,500" in content
-        assert "3\n00:00:09,000 --> 00:00:11,000\nОтлично!" in content  # noqa: RUF001
+        assert "3\n00:00:09,000 --> 00:00:11,000\nОтлично!" in content
 
     def test_generate_srt_falls_back_to_original(self, tmp_path: Path) -> None:
         segments = [Segment(id=0, text="Original text", start=0.0, end=1.0)]
@@ -250,7 +250,7 @@ class TestTranslateStepRun:
         step, _, state = _make_step(tmp_path)
         translations = {
             0: "Привет, добро пожаловать.",
-            1: "Сегодня поговорим об интересном.",  # noqa: RUF001
+            1: "Сегодня поговорим об интересном.",
             2: "Звучит отлично!",
         }
         fake_response = _fake_claude_response(translations)

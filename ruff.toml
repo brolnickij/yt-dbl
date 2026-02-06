@@ -47,6 +47,8 @@ ignore = [
     "PLR0913", # many arguments OK for CLI commands
     "FBT001",  # boolean positional in function def OK
     "FBT002",  # boolean default in function def OK
+    "RUF001",  # ambiguous Unicode — Cyrillic in strings is intentional
+    "RUF003",  # ambiguous Unicode — Cyrillic in comments is intentional
 ]
 
 [lint.isort]
