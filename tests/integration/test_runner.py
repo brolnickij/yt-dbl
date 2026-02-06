@@ -21,6 +21,51 @@ def _fake_separation_factory(sep_dir: Path) -> Any:
     return _fake
 
 
+def _fake_transcription_factory() -> dict[str, Any]:
+    """Return mock side_effects for _run_asr and _run_alignment."""
+    from yt_dbl.schemas import Segment, Word
+
+    fake_asr_segments = [
+        {"start": 0.0, "end": 3.0, "speaker_id": 0, "text": "Hello world."},
+        {"start": 4.0, "end": 6.0, "speaker_id": 1, "text": "Goodbye."},
+    ]
+
+    fake_segments = [
+        Segment(
+            id=0,
+            text="Hello world.",
+            start=0.0,
+            end=3.0,
+            speaker="SPEAKER_00",
+            language="en",
+            words=[Word(text="Hello", start=0.0, end=1.5), Word(text="world.", start=1.5, end=3.0)],
+        ),
+        Segment(
+            id=1,
+            text="Goodbye.",
+            start=4.0,
+            end=6.0,
+            speaker="SPEAKER_01",
+            language="en",
+            words=[Word(text="Goodbye.", start=4.0, end=6.0)],
+        ),
+    ]
+
+    def _fake_asr(vocals_path: Path) -> list[dict[str, Any]]:
+        return fake_asr_segments
+
+    def _fake_alignment(
+        vocals_path: Path,
+        raw_segments: list[dict[str, Any]],
+    ) -> list[Segment]:
+        return fake_segments
+
+    return {
+        "asr": _fake_asr,
+        "alignment": _fake_alignment,
+    }
+
+
 class TestCheckpoints:
     def test_save_and_load(self, tmp_path: Path) -> None:
         cfg = Settings(work_dir=tmp_path / "work")
@@ -60,11 +105,22 @@ class TestPipelineRunner:
         save_state(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
+        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with patch(
-            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-            side_effect=_fake_separation_factory(sep_dir),
+        with (
+            patch(
+                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+                side_effect=_fake_separation_factory(sep_dir),
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
+                side_effect=fakes["asr"],
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
+                side_effect=fakes["alignment"],
+            ),
         ):
             state = runner.run(state)
 
@@ -84,11 +140,22 @@ class TestPipelineRunner:
         state = prefill_download(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
+        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with patch(
-            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-            side_effect=_fake_separation_factory(sep_dir),
+        with (
+            patch(
+                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+                side_effect=_fake_separation_factory(sep_dir),
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
+                side_effect=fakes["asr"],
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
+                side_effect=fakes["alignment"],
+            ),
         ):
             state = runner.run(state)
 
@@ -107,11 +174,22 @@ class TestPipelineRunner:
         state = prefill_download(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
+        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with patch(
-            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-            side_effect=_fake_separation_factory(sep_dir),
+        with (
+            patch(
+                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+                side_effect=_fake_separation_factory(sep_dir),
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
+                side_effect=fakes["asr"],
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
+                side_effect=fakes["alignment"],
+            ),
         ):
             state = runner.run(state)
             state = runner.run(state, from_step=StepName.TRANSLATE)
@@ -145,11 +223,22 @@ class TestPipelineRunner:
         state = prefill_download(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
+        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with patch(
-            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-            side_effect=_fake_separation_factory(sep_dir),
+        with (
+            patch(
+                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+                side_effect=_fake_separation_factory(sep_dir),
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
+                side_effect=fakes["asr"],
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
+                side_effect=fakes["alignment"],
+            ),
         ):
             state = runner.run(state)
 
@@ -183,11 +272,22 @@ class TestPipelineRunner:
         state = prefill_download(state, cfg)
 
         sep_dir = cfg.step_dir("test123", "02_separate")
+        fakes = _fake_transcription_factory()
 
         runner = PipelineRunner(cfg)
-        with patch(
-            "yt_dbl.pipeline.separate.SeparateStep._run_separation",
-            side_effect=_fake_separation_factory(sep_dir),
+        with (
+            patch(
+                "yt_dbl.pipeline.separate.SeparateStep._run_separation",
+                side_effect=_fake_separation_factory(sep_dir),
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_asr",
+                side_effect=fakes["asr"],
+            ),
+            patch(
+                "yt_dbl.pipeline.transcribe.TranscribeStep._run_alignment",
+                side_effect=fakes["alignment"],
+            ),
         ):
             state = runner.run(state)
 

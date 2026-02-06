@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     separation_overlap: int = Field(default=8, ge=2, le=50)
     separation_batch_size: int = Field(default=1, ge=1, le=16)
 
+    # ── Transcription ───────────────────────────────────────────────────────
+    transcription_asr_model: str = "mlx-community/VibeVoice-ASR-bf16"
+    transcription_aligner_model: str = "mlx-community/Qwen3-ForcedAligner-0.6B-8bit"
+    transcription_max_tokens: int = Field(default=8192, ge=256, le=32768)
+    transcription_temperature: float = Field(default=0.0, ge=0.0, le=1.0)
+
     # ── Models ──────────────────────────────────────────────────────────────
     max_loaded_models: int = Field(default=1, ge=1)
 

@@ -13,6 +13,7 @@ dependencies = [
     "pydantic-settings>=2.12",
     "yt-dlp>=2026.0",
     "audio-separator[cpu]>=0.41",
+    "mlx-audio>=0.3",
 ]
 
 [dependency-groups]
@@ -36,3 +37,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/yt_dbl"]
+
+[tool.uv]
+prerelease = "allow"

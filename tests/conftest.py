@@ -121,6 +121,65 @@ def prefill_separate(state: PipelineState, cfg: Settings) -> PipelineState:
     return state
 
 
+def prefill_transcribe(state: PipelineState, cfg: Settings) -> PipelineState:
+    """Utility: populate transcribe step so translate+ steps can run.
+
+    Call after prefill_separate when tests need post-transcription state.
+    """
+    from yt_dbl.schemas import Segment, Speaker, Word
+
+    state.segments = [
+        Segment(
+            id=0,
+            text="Hello, welcome to this video.",
+            start=0.0,
+            end=3.5,
+            speaker="SPEAKER_00",
+            language="en",
+            words=[
+                Word(text="Hello,", start=0.0, end=0.5),
+                Word(text="welcome", start=0.6, end=1.0),
+                Word(text="to", start=1.1, end=1.2),
+                Word(text="this", start=1.3, end=1.5),
+                Word(text="video.", start=1.6, end=2.0),
+            ],
+        ),
+        Segment(
+            id=1,
+            text="That sounds great!",
+            start=4.0,
+            end=6.0,
+            speaker="SPEAKER_01",
+            language="en",
+            words=[
+                Word(text="That", start=4.0, end=4.3),
+                Word(text="sounds", start=4.4, end=4.8),
+                Word(text="great!", start=4.9, end=5.5),
+            ],
+        ),
+    ]
+    state.speakers = [
+        Speaker(id="SPEAKER_00", total_duration=3.5),
+        Speaker(id="SPEAKER_01", total_duration=2.0),
+    ]
+
+    step = state.get_step(StepName.TRANSCRIBE)
+    step.status = StepStatus.COMPLETED
+    step.outputs = {"segments": "segments.json"}
+
+    import json
+
+    step_dir = cfg.step_dir(state.video_id, "03_transcribe")
+    data = {
+        "segments": [s.model_dump() for s in state.segments],
+        "speakers": [s.model_dump() for s in state.speakers],
+    }
+    (step_dir / "segments.json").write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return state
+
+
 # ── E2E fixtures (only used when --run-slow) ───────────────────────────────
 
 # Shared cache so the same video is not re-downloaded across E2E tests inside
