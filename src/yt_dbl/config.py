@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     transcription_aligner_model: str = "mlx-community/Qwen3-ForcedAligner-0.6B-8bit"
     transcription_max_tokens: int = Field(default=8192, ge=256, le=32768)
     transcription_temperature: float = Field(default=0.0, ge=0.0, le=1.0)
+    # VibeVoice-ASR supports ~59 min per pass (64K tokens).
+    # For longer audio, the pipeline splits into overlapping chunks.
+    transcription_max_chunk_minutes: float = Field(default=55.0, ge=5.0, le=59.0)
+    transcription_chunk_overlap_minutes: float = Field(default=2.0, ge=0.5, le=10.0)
 
     # ── Models ──────────────────────────────────────────────────────────────
     max_loaded_models: int = Field(default=0, ge=0)  # 0 = auto-detect

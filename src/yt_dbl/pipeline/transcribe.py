@@ -156,7 +156,12 @@ class TranscribeStep(PipelineStep):
     # ── ASR (VibeVoice-ASR) ─────────────────────────────────────────────────
 
     def _run_asr(self, vocals_path: Path) -> list[dict[str, Any]]:
-        """Run VibeVoice-ASR and return parsed segment dicts."""
+        """Run VibeVoice-ASR and return parsed segment dicts.
+
+        If audio exceeds ``transcription_max_chunk_minutes`` the file is
+        split into overlapping chunks, each processed independently, and
+        results are merged with speaker-ID reconciliation across chunks.
+        """
         model_name = self.settings.transcription_asr_model
 
         if self.model_manager is not None:
@@ -171,14 +176,19 @@ class TranscribeStep(PipelineStep):
             model = self._load_stt(model_name)
 
         try:
-            with console.status(
-                "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
-                spinner="dots",
-            ):
-                result = model.generate(
-                    audio=str(vocals_path),
-                    max_tokens=self.settings.transcription_max_tokens,
-                    temperature=self.settings.transcription_temperature,
+            duration_sec = self._get_audio_duration_sec(vocals_path)
+            max_chunk_sec = self.settings.transcription_max_chunk_minutes * 60
+
+            if duration_sec <= max_chunk_sec:
+                raw_segments = self._run_asr_single(model, vocals_path)
+            else:
+                overlap_sec = self.settings.transcription_chunk_overlap_minutes * 60
+                raw_segments = self._run_asr_chunked(
+                    model,
+                    vocals_path,
+                    duration_sec,
+                    max_chunk_sec,
+                    overlap_sec,
                 )
         except TranscriptionError:
             raise
@@ -190,8 +200,7 @@ class TranscribeStep(PipelineStep):
                 del model
                 gc.collect()
 
-        # VibeVoice key names vary across versions
-        return self._normalise_asr_segments(result)
+        return raw_segments
 
     @staticmethod
     def _load_stt(model_name: str) -> Any:
@@ -201,6 +210,219 @@ class TranscribeStep(PipelineStep):
         log_info(f"Loading model: {model_name}")
         with suppress_library_noise():
             return load_stt_model(model_name)
+
+    # ── Single-pass & chunked ASR helpers ───────────────────────────────────
+
+    def _run_asr_single(self, model: Any, audio_path: Path) -> list[dict[str, Any]]:
+        """Run ASR on a single audio file (must fit within model limits)."""
+        with console.status(
+            "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
+            spinner="dots",
+        ):
+            result = model.generate(
+                audio=str(audio_path),
+                max_tokens=self.settings.transcription_max_tokens,
+                temperature=self.settings.transcription_temperature,
+            )
+        return self._normalise_asr_segments(result)
+
+    def _run_asr_chunked(
+        self,
+        model: Any,
+        vocals_path: Path,
+        duration_sec: float,
+        max_chunk_sec: float,
+        overlap_sec: float,
+    ) -> list[dict[str, Any]]:
+        """Split long audio into overlapping chunks, run ASR, merge results."""
+        import soundfile as sf
+
+        info = sf.info(str(vocals_path))
+        sr = info.samplerate
+
+        # Calculate chunk boundaries
+        boundaries: list[tuple[float, float]] = []
+        chunk_start = 0.0
+        while chunk_start < duration_sec:
+            chunk_end = min(chunk_start + max_chunk_sec, duration_sec)
+            boundaries.append((chunk_start, chunk_end))
+            if chunk_end >= duration_sec:
+                break
+            chunk_start += max_chunk_sec - overlap_sec
+
+        n_chunks = len(boundaries)
+        dur_min = duration_sec / 60
+        log_info(
+            f"Audio is {dur_min:.1f} min - splitting into {n_chunks} chunks "
+            f"({max_chunk_sec / 60:.0f} min each, {overlap_sec / 60:.0f} min overlap)"
+        )
+
+        # Process each chunk: (chunk_start, chunk_end, segments_with_global_timestamps)
+        processed: list[tuple[float, float, list[dict[str, Any]]]] = []
+        global_max_spk = -1
+
+        progress = create_progress()
+        with progress:
+            task = progress.add_task("  ASR chunks", total=n_chunks)
+
+            for i, (start_sec, end_sec) in enumerate(boundaries):
+                # Read chunk audio from file
+                start_frame = int(start_sec * sr)
+                num_frames = int((end_sec - start_sec) * sr)
+
+                with sf.SoundFile(str(vocals_path)) as f:
+                    f.seek(start_frame)
+                    audio_data = f.read(num_frames)
+
+                # Write temp chunk file
+                chunk_path = self.step_dir / f"_asr_chunk_{i:03d}.wav"
+                sf.write(str(chunk_path), audio_data, sr)
+
+                try:
+                    raw = self._run_asr_single(model, chunk_path)
+
+                    # Offset timestamps to global time
+                    for seg in raw:
+                        seg["start"] += start_sec
+                        seg["end"] += start_sec
+
+                    # Reconcile speaker IDs with previous chunk
+                    if i == 0:
+                        global_max_spk = max(
+                            (s["speaker_id"] for s in raw),
+                            default=0,
+                        )
+                    else:
+                        _prev_start, prev_end = boundaries[i - 1]
+                        mapping, global_max_spk = self._reconcile_chunk_speakers(
+                            prev_segments=processed[i - 1][2],
+                            curr_segments=raw,
+                            overlap_start=start_sec,
+                            overlap_end=prev_end,
+                            global_max_speaker=global_max_spk,
+                        )
+                        for seg in raw:
+                            seg["speaker_id"] = mapping.get(
+                                seg["speaker_id"],
+                                seg["speaker_id"],
+                            )
+
+                    processed.append((start_sec, end_sec, raw))
+                    log_info(
+                        f"Chunk {i + 1}/{n_chunks}: {len(raw)} segments "
+                        f"({start_sec / 60:.1f}-{end_sec / 60:.1f} min)"
+                    )
+                finally:
+                    chunk_path.unlink(missing_ok=True)
+
+                progress.advance(task)
+
+        return self._merge_chunk_segments(processed, overlap_sec)
+
+    @staticmethod
+    def _get_audio_duration_sec(path: Path) -> float:
+        """Return audio file duration in seconds."""
+        import soundfile as sf
+
+        return float(sf.info(str(path)).duration)
+
+    @staticmethod
+    def _merge_chunk_segments(
+        chunk_results: list[tuple[float, float, list[dict[str, Any]]]],
+        overlap_sec: float,
+    ) -> list[dict[str, Any]]:
+        """Merge segments from overlapping chunks, deduplicating overlap zones.
+
+        Each chunk "owns" segments whose ``start`` falls within its zone.
+        Zone boundaries are the midpoints of the overlap regions between
+        adjacent chunks.
+        """
+        if not chunk_results:
+            return []
+        if len(chunk_results) == 1:
+            return chunk_results[0][2]
+
+        # Midpoints between adjacent overlap zones
+        midpoints: list[float] = []
+        for i in range(len(chunk_results) - 1):
+            next_start = chunk_results[i + 1][0]
+            midpoints.append(next_start + overlap_sec / 2)
+
+        merged: list[dict[str, Any]] = []
+        for i, (_start, _end, segments) in enumerate(chunk_results):
+            lo = midpoints[i - 1] if i > 0 else 0.0
+            hi = midpoints[i] if i < len(midpoints) else float("inf")
+            merged.extend(seg for seg in segments if lo <= seg["start"] < hi)
+
+        return merged
+
+    @staticmethod
+    def _reconcile_chunk_speakers(
+        prev_segments: list[dict[str, Any]],
+        curr_segments: list[dict[str, Any]],
+        overlap_start: float,
+        overlap_end: float,
+        global_max_speaker: int,
+    ) -> tuple[dict[int, int], int]:
+        """Map current-chunk speaker IDs to match the previous chunk.
+
+        Uses temporal overlap of segments in the shared zone for greedy
+        bipartite matching.  Unmatched speakers get fresh global IDs.
+
+        Returns ``(mapping, new_global_max)`` where *mapping* is
+        ``{curr_local_id: global_id}``.
+        """
+        prev_in_zone = [
+            s for s in prev_segments if s["end"] > overlap_start and s["start"] < overlap_end
+        ]
+        curr_in_zone = [
+            s for s in curr_segments if s["end"] > overlap_start and s["start"] < overlap_end
+        ]
+
+        all_curr_ids = sorted({s["speaker_id"] for s in curr_segments})
+        gmax = global_max_speaker
+
+        if not prev_in_zone or not curr_in_zone:
+            # No overlap data - assign fresh global IDs
+            mapping: dict[int, int] = {}
+            for cid in all_curr_ids:
+                gmax += 1
+                mapping[cid] = gmax
+            return mapping, gmax
+
+        prev_ids = sorted({s["speaker_id"] for s in prev_in_zone})
+        curr_ids = sorted({s["speaker_id"] for s in curr_in_zone})
+
+        # Compute temporal overlap for every (curr, prev) speaker pair
+        scores: list[tuple[float, int, int]] = []
+        for cid in curr_ids:
+            c_ivs = [(s["start"], s["end"]) for s in curr_in_zone if s["speaker_id"] == cid]
+            for pid in prev_ids:
+                p_ivs = [(s["start"], s["end"]) for s in prev_in_zone if s["speaker_id"] == pid]
+                total = 0.0
+                for cs, ce in c_ivs:
+                    for ps, pe in p_ivs:
+                        ov = min(ce, pe) - max(cs, ps)
+                        if ov > 0:
+                            total += ov
+                scores.append((total, cid, pid))
+
+        # Greedy matching by descending overlap
+        scores.sort(reverse=True)
+        mapping = {}
+        used_prev: set[int] = set()
+        for score, cid, pid in scores:
+            if cid not in mapping and pid not in used_prev and score > 0:
+                mapping[cid] = pid
+                used_prev.add(pid)
+
+        # Unmatched current speakers get new global IDs
+        for cid in all_curr_ids:
+            if cid not in mapping:
+                gmax += 1
+                mapping[cid] = gmax
+
+        return mapping, gmax
 
     @staticmethod
     def _normalise_asr_segments(result: Any) -> list[dict[str, Any]]:

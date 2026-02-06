@@ -603,3 +603,151 @@ class TestTTSLangMap:
         """Every TTS language should also be in the aligner map."""
         for code in TTS_LANG_MAP:
             assert code in ALIGNER_LANGUAGE_MAP
+
+
+# ── Chunk merging tests ─────────────────────────────────────────────────────
+
+
+class TestMergeChunkSegments:
+    """Tests for TranscribeStep._merge_chunk_segments."""
+
+    def test_single_chunk_passthrough(self) -> None:
+        segs = [{"start": 0.0, "end": 3.0, "speaker_id": 0, "text": "Hi"}]
+        result = TranscribeStep._merge_chunk_segments([(0.0, 3300.0, segs)], 120.0)
+        assert result == segs
+
+    def test_empty_input(self) -> None:
+        assert TranscribeStep._merge_chunk_segments([], 120.0) == []
+
+    def test_two_chunks_no_duplicates(self) -> None:
+        """Segments in overlap zone are deduplicated by midpoint rule."""
+        overlap_sec = 120.0
+        # Chunk 0: [0, 3300], Chunk 1: [3180, 6480]
+        # Overlap zone: [3180, 3300], midpoint = 3180 + 60 = 3240
+        seg_a1 = {"start": 100.0, "end": 105.0, "speaker_id": 0, "text": "A1"}
+        seg_a2 = {"start": 3200.0, "end": 3210.0, "speaker_id": 0, "text": "A2"}  # in overlap
+        seg_a3 = {"start": 3250.0, "end": 3260.0, "speaker_id": 0, "text": "A3"}  # past midpoint
+
+        seg_b1 = {"start": 3200.0, "end": 3210.0, "speaker_id": 0, "text": "B1"}  # before midpoint
+        seg_b2 = {"start": 3250.0, "end": 3260.0, "speaker_id": 0, "text": "B2"}  # past midpoint
+        seg_b3 = {"start": 4000.0, "end": 4010.0, "speaker_id": 0, "text": "B3"}
+
+        chunks = [
+            (0.0, 3300.0, [seg_a1, seg_a2, seg_a3]),
+            (3180.0, 6480.0, [seg_b1, seg_b2, seg_b3]),
+        ]
+        result = TranscribeStep._merge_chunk_segments(chunks, overlap_sec)
+
+        texts = [s["text"] for s in result]
+        # A1 (< midpoint 3240) from chunk 0
+        # A2 (start=3200 < 3240) from chunk 0
+        # A3 (start=3250 >= 3240) NOT from chunk 0 (hi=3240)
+        # B1 (start=3200 < 3240) NOT from chunk 1 (lo=3240)
+        # B2 (start=3250 >= 3240) from chunk 1
+        # B3 from chunk 1
+        assert texts == ["A1", "A2", "B2", "B3"]
+
+    def test_three_chunks(self) -> None:
+        overlap_sec = 120.0
+        # Chunk 0: [0, 3300], Chunk 1: [3180, 6480], Chunk 2: [6360, 9660]
+        # Mid 0-1 = 3240, Mid 1-2 = 6420
+        chunks = [
+            (0.0, 3300.0, [{"start": 1000.0, "end": 1010.0, "speaker_id": 0, "text": "C0"}]),
+            (3180.0, 6480.0, [{"start": 5000.0, "end": 5010.0, "speaker_id": 0, "text": "C1"}]),
+            (6360.0, 9660.0, [{"start": 8000.0, "end": 8010.0, "speaker_id": 0, "text": "C2"}]),
+        ]
+        result = TranscribeStep._merge_chunk_segments(chunks, overlap_sec)
+        assert [s["text"] for s in result] == ["C0", "C1", "C2"]
+
+
+# ── Speaker reconciliation tests ────────────────────────────────────────────
+
+
+class TestReconcileChunkSpeakers:
+    """Tests for TranscribeStep._reconcile_chunk_speakers."""
+
+    def test_matching_two_speakers(self) -> None:
+        """Speakers in overlap zone are correctly matched by temporal overlap."""
+        # Previous chunk (global IDs already assigned): speaker 0 and 1
+        prev = [
+            {"start": 3180.0, "end": 3220.0, "speaker_id": 0, "text": "prev-spk0"},
+            {"start": 3220.0, "end": 3300.0, "speaker_id": 1, "text": "prev-spk1"},
+        ]
+        # Current chunk (local IDs): speaker 0 and 1 (swapped)
+        curr = [
+            {"start": 3180.0, "end": 3230.0, "speaker_id": 1, "text": "curr-spk1"},
+            {"start": 3230.0, "end": 3300.0, "speaker_id": 0, "text": "curr-spk0"},
+            {"start": 3400.0, "end": 3500.0, "speaker_id": 0, "text": "outside"},
+            {"start": 3500.0, "end": 3600.0, "speaker_id": 1, "text": "outside2"},
+        ]
+        mapping, gmax = TranscribeStep._reconcile_chunk_speakers(
+            prev,
+            curr,
+            overlap_start=3180.0,
+            overlap_end=3300.0,
+            global_max_speaker=1,
+        )
+        # curr speaker 1 overlaps with prev speaker 0 (3180-3220 overlap)
+        # curr speaker 0 overlaps with prev speaker 1 (3230-3300 overlap)
+        assert mapping[1] == 0
+        assert mapping[0] == 1
+        assert gmax == 1  # no new speakers
+
+    def test_no_overlap_data(self) -> None:
+        """When no segments fall in overlap zone, assign fresh IDs."""
+        prev = [{"start": 100.0, "end": 200.0, "speaker_id": 0, "text": "far away"}]
+        curr = [
+            {"start": 5000.0, "end": 5100.0, "speaker_id": 0, "text": "also far"},
+            {"start": 5100.0, "end": 5200.0, "speaker_id": 1, "text": "also far"},
+        ]
+        mapping, gmax = TranscribeStep._reconcile_chunk_speakers(
+            prev,
+            curr,
+            overlap_start=3180.0,
+            overlap_end=3300.0,
+            global_max_speaker=1,
+        )
+        # No overlap data → fresh IDs: 2 and 3
+        assert mapping[0] == 2
+        assert mapping[1] == 3
+        assert gmax == 3
+
+    def test_new_speaker_in_later_chunk(self) -> None:
+        """A speaker appearing only in the current chunk gets a fresh ID."""
+        prev = [
+            {"start": 3180.0, "end": 3300.0, "speaker_id": 0, "text": "prev"},
+        ]
+        curr = [
+            {"start": 3180.0, "end": 3300.0, "speaker_id": 0, "text": "match"},
+            {"start": 3400.0, "end": 3500.0, "speaker_id": 1, "text": "new speaker"},
+        ]
+        mapping, gmax = TranscribeStep._reconcile_chunk_speakers(
+            prev,
+            curr,
+            overlap_start=3180.0,
+            overlap_end=3300.0,
+            global_max_speaker=0,
+        )
+        assert mapping[0] == 0  # matched to prev speaker 0
+        assert mapping[1] == 1  # new global ID
+        assert gmax == 1
+
+
+# ── Chunking config tests ──────────────────────────────────────────────────
+
+
+class TestChunkingConfig:
+    def test_default_max_chunk_minutes(self) -> None:
+        cfg = Settings()
+        assert cfg.transcription_max_chunk_minutes == 55.0
+
+    def test_default_chunk_overlap(self) -> None:
+        cfg = Settings()
+        assert cfg.transcription_chunk_overlap_minutes == 2.0
+
+    def test_custom_chunk_settings_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("YT_DBL_TRANSCRIPTION_MAX_CHUNK_MINUTES", "45")
+        monkeypatch.setenv("YT_DBL_TRANSCRIPTION_CHUNK_OVERLAP_MINUTES", "3")
+        cfg = Settings()
+        assert cfg.transcription_max_chunk_minutes == 45.0
+        assert cfg.transcription_chunk_overlap_minutes == 3.0
