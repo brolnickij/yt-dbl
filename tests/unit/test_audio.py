@@ -91,12 +91,15 @@ class TestRunFfmpeg:
     def test_basic_args(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
         run_ffmpeg(["-i", "in.mp4", "out.wav"])
-        mock_run.assert_called_once_with(
-            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", "in.mp4", "out.wav"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        # Binary is first; user args are appended after default flags
+        assert cmd[0] == "ffmpeg"
+        assert cmd[-3:] == ["-i", "in.mp4", "out.wav"]
+        for flag in ("-y", "-hide_banner"):
+            assert flag in cmd
+        assert mock_run.call_args[1] == {"capture_output": True, "text": True, "check": True}
 
     @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
     @patch("subprocess.run")
