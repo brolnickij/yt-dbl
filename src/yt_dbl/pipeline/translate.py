@@ -45,26 +45,12 @@ separate letters with spaces (e.g. "FBI" → "F B I").
 natural conversational flow. Avoid bookish or formal written style.
 10. NEVER use characters that TTS cannot speak naturally: parentheses (), \
 brackets [], slashes /, quotation marks. Rephrase in plain words instead.
-{extra_rules}\
 OUTPUT FORMAT — return ONLY a raw JSON array, no markdown, no commentary:
 [
-  {{"id": 0, "translated_text": "{example_translation}"}},
+  {{"id": 0, "translated_text": "Translated text here"}},
   {{"id": 1, "translated_text": "Another segment translation"}}
 ]
 """
-
-# Languages where Unicode stress marks (U+0301) help TTS pronunciation
-_STRESS_LANGUAGES = {"ru", "uk"}
-
-_STRESS_RULE = """\
-11. CRITICAL — place Unicode combining acute accent (U+0301) on the \
-stressed vowel in EVERY word of 2+ syllables. \
-Example: "Францу́зская прокурату́ра прово́дит обы́ски в офи́сах". \
-Never omit stress marks — they directly control TTS pronunciation quality.
-"""
-
-_STRESS_EXAMPLE = "Переведённый те́кст с ударе́ниями"
-_DEFAULT_EXAMPLE = "Translated text here"
 
 
 def _build_user_message(segments: list[Segment]) -> str:
@@ -208,17 +194,9 @@ class TranslateStep(PipelineStep):
         )
 
         duration_hint = _build_duration_hint(segments)
-        if target_language in _STRESS_LANGUAGES:
-            extra_rules = _STRESS_RULE
-            example_translation = _STRESS_EXAMPLE
-        else:
-            extra_rules = ""
-            example_translation = _DEFAULT_EXAMPLE
         system_prompt = _SYSTEM_PROMPT.format(
             target_language=target_language,
             duration_hint=duration_hint,
-            extra_rules=extra_rules,
-            example_translation=example_translation,
         )
         user_message = _build_user_message(segments)
 
