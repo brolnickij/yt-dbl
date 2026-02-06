@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from yt_dbl.config import settings
-from yt_dbl.utils.logging import log_info, log_model_load, log_model_unload
+from yt_dbl.utils.logging import get_metal_memory_mb, log_info, log_model_load, log_model_unload
 
 __all__ = ["ModelManager", "model_manager"]
 
@@ -89,12 +89,20 @@ class ModelManager:
             )
 
         loader, _ = self._loaders[name]
-        log_model_load(name)
+
+        mem_before = get_metal_memory_mb()
+        t0 = time.time()
 
         model = loader()
+
+        elapsed = time.time() - t0
+        mem_after = get_metal_memory_mb()
+        mem_delta = max(0.0, mem_after - mem_before)
+
         self._models[name] = LoadedModel(name=name, model=model)
         self._models.move_to_end(name)
 
+        log_model_load(name, elapsed=elapsed, mem_delta_mb=mem_delta)
         log_info(f"Models loaded: {len(self._models)}/{self.max_loaded}")
         return model
 
@@ -113,7 +121,8 @@ class ModelManager:
             return
 
         entry = self._models.pop(name)
-        log_model_unload(name)
+
+        mem_before = get_metal_memory_mb()
 
         # Call custom unloader if registered
         _, unloader = self._loaders.get(name, (None, None))
@@ -122,6 +131,10 @@ class ModelManager:
 
         del entry.model
         self._cleanup_memory()
+
+        mem_after = get_metal_memory_mb()
+        mem_freed = max(0.0, mem_before - mem_after)
+        log_model_unload(name, mem_freed_mb=mem_freed)
 
     def unload_all(self) -> None:
         """Unload all models."""
@@ -138,8 +151,19 @@ class ModelManager:
 
     @staticmethod
     def _cleanup_memory() -> None:
-        """Run garbage collection and clear GPU caches."""
+        """Run garbage collection and clear GPU/Metal caches."""
         gc.collect()
+
+        # MLX Metal cache (Apple Silicon)
+        try:
+            import mlx.core as mx
+
+            if hasattr(mx, "metal") and hasattr(mx.metal, "clear_cache"):
+                mx.metal.clear_cache()
+        except ImportError:
+            pass
+
+        # PyTorch MPS / CUDA cache (audio-separator uses torch)
         try:
             import torch
 
