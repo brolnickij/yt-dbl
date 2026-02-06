@@ -94,7 +94,6 @@ class SynthesizeStep(PipelineStep):
         # Step 4: clean up intermediate WAVs (raw_*, sped_*)
         self._cleanup_intermediates(state)
 
-        # Persist metadata
         self._save_meta(state, meta_path)
 
         result = state.get_step(self.name)

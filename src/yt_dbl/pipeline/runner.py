@@ -131,7 +131,6 @@ class PipelineRunner:
                     log_step_skip(step_name)
                     continue
 
-            # Run the step
             state = self._run_step(step_name, state)
 
             # Stop on failure

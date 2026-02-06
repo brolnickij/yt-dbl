@@ -139,7 +139,6 @@ class TranscribeStep(PipelineStep):
         speakers = self._extract_speakers(segments)
         log_info(f"Detected {len(speakers)} speakers")
 
-        # Persist
         state.segments = segments
         state.speakers = speakers
         self._save(segments_path, segments, speakers)

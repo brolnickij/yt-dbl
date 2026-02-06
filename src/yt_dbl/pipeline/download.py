@@ -116,10 +116,8 @@ class DownloadStep(PipelineStep):
             "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
             "--merge-output-format",
             "mp4",
-            # Output
             "-o",
             str(output_path),
-            # Progress
             "--newline",
             "--no-warnings",
             # Avoid post-processing issues

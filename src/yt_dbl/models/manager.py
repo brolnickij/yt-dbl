@@ -70,7 +70,6 @@ class ModelManager:
         if name in self._models:
             entry = self._models[name]
             entry.touch()
-            # Move to end (most recently used)
             self._models.move_to_end(name)
             return entry.model
 
@@ -78,7 +77,6 @@ class ModelManager:
 
     def _load(self, name: str) -> Any:
         """Load a model, evicting LRU if over limit."""
-        # Evict if at capacity
         while len(self._models) >= self.max_loaded:
             self._evict_lru()
 
@@ -123,7 +121,6 @@ class ModelManager:
 
         mem_before = get_metal_memory_mb()
 
-        # Call custom unloader if registered
         _, unloader = self._loaders.get(name, (None, None))
         if unloader:
             unloader(entry.model)

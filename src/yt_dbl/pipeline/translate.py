@@ -160,7 +160,6 @@ class TranslateStep(PipelineStep):
             log_info("Found existing translations — loading from cache")
             return self._load_cached(state, translations_path, srt_path)
 
-        # Call Claude API
         source_lang = state.source_language or "auto-detected"
         translations = self._translate(state.segments, state.target_language, source_lang)
         log_info(f"Translated {len(translations)}/{len(state.segments)} segments")
@@ -176,7 +175,6 @@ class TranslateStep(PipelineStep):
         if missing:
             log_warning(f"{len(missing)} segments have no translation: {missing}")
 
-        # Persist
         self._save(translations_path, translations)
         _generate_srt(state.segments, srt_path)
         log_info(f"Generated subtitles: {SUBTITLES_FILE}")
