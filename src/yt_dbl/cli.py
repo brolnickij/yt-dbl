@@ -24,6 +24,7 @@ app = typer.Typer(
     help="YouTube video dubbing with voice cloning.",
     no_args_is_help=True,
     rich_markup_mode="rich",
+    add_completion=False,
 )
 models_app = typer.Typer(help="Manage ML models.", no_args_is_help=True)
 app.add_typer(models_app, name="models")
