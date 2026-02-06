@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from yt_dbl.config import Settings
-from yt_dbl.pipeline.base import StepValidationError
+from yt_dbl.pipeline.base import StepValidationError, SynthesisError
 from yt_dbl.pipeline.synthesize import (
     SYNTH_META_FILE,
     SynthesizeStep,
@@ -330,6 +330,43 @@ class TestSynthesizeStepRun:
 
         assert state.segments[0].synth_path == "segment_0000.wav"
         assert state.get_step(StepName.SYNTHESIZE).outputs["meta"] == SYNTH_META_FILE
+
+    def test_run_tts_empty_result_raises(self, tmp_path: Path) -> None:
+        """SynthesisError is raised when TTS model returns no audio chunks."""
+        step, _, state = _make_step(tmp_path)
+
+        mock_model = MagicMock()
+
+        def _run_tts_empty(
+            _self: object,
+            _model: object,
+            _text: object,
+            _ref: object,
+            _ref_text: object,
+            _lang: object,
+        ) -> Any:
+            raise SynthesisError("TTS returned no audio for text: Privet")
+
+        with (
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _run_tts_empty,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
+            ),
+            patch(
+                "yt_dbl.utils.audio_processing.run_ffmpeg",
+                side_effect=_ffmpeg_touch,
+            ),
+            pytest.raises(SynthesisError, match="no audio"),
+        ):
+            step.run(state)
 
 
 # ── Config tests ────────────────────────────────────────────────────────────
