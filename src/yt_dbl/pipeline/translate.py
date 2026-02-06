@@ -1,8 +1,9 @@
-"""Step 4: Translate segments via Claude API (single-pass).
+"""Step 4: Translate segments via Claude API.
 
-Sends all transcript segments to Claude Sonnet 4.5 in a single call.
-The model translates, self-reflects, and returns the final adapted result
-in one pass — leveraging the 1M token context window.
+Sends transcript segments to Claude Sonnet 4.5 for translation.
+For short videos everything is sent in a single call; for long audio
+(>300 segments) the pipeline batches requests automatically to stay
+within the model's output token limit.
 """
 
 from __future__ import annotations
@@ -139,7 +140,7 @@ def _format_srt_time(seconds: float) -> str:
 
 class TranslateStep(PipelineStep):
     name = StepName.TRANSLATE
-    description = "Translate via Claude Sonnet 4.5 (single-pass)"
+    description = "Translate via Claude API (auto-batched)"
 
     # ── validation ──────────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ class TranslateStep(PipelineStep):
             return self._load_cached(state, translations_path, srt_path)
 
         source_lang = state.source_language or "auto-detected"
-        translations = self._translate(state.segments, state.target_language, source_lang)
+        translations = self._translate_all(state.segments, state.target_language, source_lang)
         log_info(f"Translated {len(translations)}/{len(state.segments)} segments")
 
         # Apply translations to segments
@@ -189,13 +190,40 @@ class TranslateStep(PipelineStep):
 
     # ── Claude API ──────────────────────────────────────────────────────────
 
-    def _translate(
+    def _translate_all(
         self,
         segments: list[Segment],
         target_language: str,
         source_language: str = "auto-detected",
     ) -> dict[int, str]:
-        """Call Claude API with all segments and return translations."""
+        """Translate all segments, batching automatically if needed."""
+        batch_size = self.settings.translation_batch_size
+
+        if len(segments) <= batch_size:
+            return self._translate_batch(segments, target_language, source_language)
+
+        # Split into batches
+        batches = [segments[i : i + batch_size] for i in range(0, len(segments), batch_size)]
+        log_info(
+            f"Splitting {len(segments)} segments into {len(batches)} batches "
+            f"({batch_size} segments each)"
+        )
+
+        all_translations: dict[int, str] = {}
+        for idx, batch in enumerate(batches):
+            log_info(f"Translating batch {idx + 1}/{len(batches)} ({len(batch)} segments)")
+            batch_result = self._translate_batch(batch, target_language, source_language)
+            all_translations.update(batch_result)
+
+        return all_translations
+
+    def _translate_batch(
+        self,
+        segments: list[Segment],
+        target_language: str,
+        source_language: str = "auto-detected",
+    ) -> dict[int, str]:
+        """Call Claude API with a batch of segments and return translations."""
         from anthropic import Anthropic
 
         client = Anthropic(
@@ -215,7 +243,7 @@ class TranslateStep(PipelineStep):
 
         response = client.messages.create(
             model=self.settings.claude_model,
-            max_tokens=16384,
+            max_tokens=self.settings.translation_max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )

@@ -371,3 +371,88 @@ class TestTranslationConfig:
         monkeypatch.setenv("YT_DBL_CLAUDE_MODEL", "claude-sonnet-4-5")
         cfg = Settings()
         assert cfg.claude_model == "claude-sonnet-4-5"
+
+    def test_default_translation_batch_size(self) -> None:
+        cfg = Settings()
+        assert cfg.translation_batch_size == 300
+
+    def test_default_translation_max_tokens(self) -> None:
+        cfg = Settings()
+        assert cfg.translation_max_tokens == 16384
+
+    def test_custom_batch_size_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("YT_DBL_TRANSLATION_BATCH_SIZE", "500")
+        cfg = Settings()
+        assert cfg.translation_batch_size == 500
+
+
+# ── Batched translation tests ───────────────────────────────────────────────
+
+
+class TestBatchedTranslation:
+    def _make_many_segments(self, n: int) -> list[Segment]:
+        """Create n dummy segments."""
+        return [
+            Segment(
+                id=i,
+                text=f"Segment number {i}.",
+                start=float(i * 5),
+                end=float(i * 5 + 4),
+                speaker=f"SPEAKER_{i % 2:02d}",
+                language="en",
+            )
+            for i in range(n)
+        ]
+
+    def test_small_input_single_batch(self, tmp_path: Path) -> None:
+        """Fewer segments than batch_size -> single API call."""
+        step, _, state = _make_step(tmp_path)
+        translations = {0: "A", 1: "B", 2: "C"}
+        fake_response = _fake_claude_response(translations)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = fake_response
+            mock_cls.return_value = mock_client
+
+            state = step.run(state)
+
+        # Single call for 3 segments (batch_size=300)
+        assert mock_client.messages.create.call_count == 1
+        assert state.segments[0].translated_text == "A"
+
+    def test_large_input_multiple_batches(self, tmp_path: Path) -> None:
+        """More segments than batch_size -> multiple API calls."""
+        cfg = Settings(
+            work_dir=tmp_path / "work",
+            anthropic_api_key="sk-test-key",
+            translation_batch_size=10,
+        )
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
+        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state.segments = self._make_many_segments(25)
+        trans = state.get_step(StepName.TRANSCRIBE)
+        trans.status = StepStatus.COMPLETED
+        trans.outputs = {"segments": "segments.json"}
+
+        def make_response_for_batch(
+            *, model: str, max_tokens: int, system: str, messages: list
+        ) -> MagicMock:
+            user_msg = messages[0]["content"]
+            items = json.loads(user_msg)
+            translations = {item["id"]: f"Translated {item['id']}" for item in items}
+            return _fake_claude_response(translations)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.create.side_effect = make_response_for_batch
+            mock_cls.return_value = mock_client
+
+            state = step.run(state)
+
+        # 25 segments / 10 per batch = 3 API calls
+        assert mock_client.messages.create.call_count == 3
+        # All 25 segments translated
+        for seg in state.segments:
+            assert seg.translated_text == f"Translated {seg.id}"
