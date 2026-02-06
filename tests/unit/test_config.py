@@ -12,7 +12,7 @@ class TestSettings:
         s = Settings(anthropic_api_key="test", hf_token="test")
         assert s.target_language == "ru"
         assert s.output_format == "mp4"
-        assert s.subtitles is True
+        assert s.subtitle_mode == "softsub"
         assert s.background_volume == 0.15
         assert s.max_speed_factor == 1.4
         assert s.voice_ref_duration == 7.0

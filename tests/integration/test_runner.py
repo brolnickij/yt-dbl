@@ -136,6 +136,10 @@ def _pipeline_patches(sep_dir: Path) -> Any:
     stack.enter_context(
         patch("yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav"),
     )
+    # Assemble mocks: skip real ffmpeg for final muxing
+    stack.enter_context(
+        patch("yt_dbl.pipeline.assemble.run_ffmpeg"),
+    )
     return stack
 
 

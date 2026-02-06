@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # ── Pipeline ────────────────────────────────────────────────────────────
     target_language: str = "ru"
     output_format: str = "mp4"  # mp4 | mkv
-    subtitles: bool = True
+    subtitle_mode: str = "softsub"  # softsub | hardsub | none
 
     # ── Audio ───────────────────────────────────────────────────────────────
     background_volume: float = Field(default=0.15, ge=0.0, le=1.0)

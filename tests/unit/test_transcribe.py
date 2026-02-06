@@ -18,6 +18,7 @@ from yt_dbl.pipeline.transcribe import (
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, StepStatus, Word
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 
@@ -65,7 +66,7 @@ class _FakeAlignItem:
 class _FakeAlignResult:
     items: list[_FakeAlignItem]
 
-    def __iter__(self):  # type: ignore[override]
+    def __iter__(self) -> Iterator[_FakeAlignItem]:
         return iter(self.items)
 
 

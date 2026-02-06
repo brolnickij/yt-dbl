@@ -79,6 +79,10 @@ def dub(
         float | None, typer.Option("--max-speed", help="Max TTS speed factor")
     ] = None,
     no_subs: Annotated[bool, typer.Option("--no-subs", help="Disable subtitles")] = False,
+    sub_mode: Annotated[
+        str | None,
+        typer.Option("--sub-mode", help="Subtitle mode (softsub/hardsub/none)"),
+    ] = None,
     output_format: Annotated[
         str | None, typer.Option("--format", help="Output format (mp4/mkv)")
     ] = None,
@@ -91,7 +95,7 @@ def dub(
         max_loaded_models=max_models,
         background_volume=background_volume,
         max_speed_factor=max_speed,
-        subtitles=not no_subs if no_subs else None,
+        subtitle_mode="none" if no_subs else sub_mode,
         output_format=output_format,
     )
 
