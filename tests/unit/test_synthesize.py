@@ -33,6 +33,13 @@ def _ffmpeg_touch(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]
     return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
 
+def _fake_postprocess(input_path: Path, output_path: Path, **_kwargs: Any) -> Path:
+    """Mock postprocess_segment that creates the output file."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(b"fake-audio")
+    return output_path
+
+
 def _make_segments() -> list[Segment]:
     return [
         Segment(
@@ -250,6 +257,10 @@ class TestSynthesizeStepRun:
                 side_effect=_ffmpeg_touch,
             ),
             patch(
+                "yt_dbl.pipeline.synthesize.postprocess_segment",
+                side_effect=_fake_postprocess,
+            ),
+            patch(
                 "yt_dbl.pipeline.synthesize.get_audio_duration",
                 return_value=1.0,  # shorter than original → no speedup
             ),
@@ -286,6 +297,10 @@ class TestSynthesizeStepRun:
             patch(
                 "yt_dbl.utils.audio_processing.run_ffmpeg",
                 side_effect=_ffmpeg_touch,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.postprocess_segment",
+                side_effect=_fake_postprocess,
             ),
             patch(
                 "yt_dbl.pipeline.synthesize.get_audio_duration",

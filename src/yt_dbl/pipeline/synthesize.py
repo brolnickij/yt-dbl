@@ -17,10 +17,8 @@ from yt_dbl.pipeline.base import PipelineStep
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName
 from yt_dbl.utils.audio import get_audio_duration
 from yt_dbl.utils.audio_processing import (
-    deess,
     extract_voice_reference,
-    normalize_loudness,
-    speed_up_audio,
+    postprocess_segment,
 )
 from yt_dbl.utils.logging import create_progress, log_info, suppress_library_noise
 
@@ -241,42 +239,36 @@ class SynthesizeStep(PipelineStep):
     def _postprocess_one(self, seg: Segment) -> tuple[str, float | None]:
         """Postprocess a single segment: speed-adjust + loudness-normalize + de-ess.
 
-        Runs in a worker thread.  All heavy lifting is done by ffmpeg/ffprobe
-        subprocesses, so the GIL is released and segments process truly in
-        parallel.
+        Runs in a worker thread.  Uses ``postprocess_segment`` which
+        combines filters into minimal ffmpeg calls, eliminating
+        intermediate files.
         """
         raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
         final_path = self.step_dir / f"segment_{seg.id:04d}.wav"
-        deessed_path = self.step_dir / f"deessed_{seg.id:04d}.wav"
 
         synth_dur = get_audio_duration(raw_path)
         original_dur = seg.duration
-        speed_factor = 1.0
+        speed: float | None = None
 
         if synth_dur > original_dur > 0:
-            speed_factor = synth_dur / original_dur
-            max_speed = self.settings.max_speed_factor
-            speed_factor = min(speed_factor, max_speed)
+            factor = min(synth_dur / original_dur, self.settings.max_speed_factor)
+            _speed_threshold = 1.01
+            if factor > _speed_threshold:
+                speed = factor
 
-        _speed_threshold = 1.01
-        if speed_factor > _speed_threshold:
-            sped_path = self.step_dir / f"sped_{seg.id:04d}.wav"
-            speed_up_audio(raw_path, sped_path, speed_factor)
-            normalize_loudness(sped_path, deessed_path)
-            deess(deessed_path, final_path)
-            return final_path.name, round(speed_factor, 3)
+        postprocess_segment(raw_path, final_path, speed_factor=speed)
 
-        normalize_loudness(raw_path, deessed_path)
-        deess(deessed_path, final_path)
+        if speed is not None:
+            return final_path.name, round(speed, 3)
         return final_path.name, None
 
     def _cleanup_intermediates(self, state: PipelineState) -> None:
-        """Remove raw_*.wav, sped_*.wav and deessed_*.wav after successful postprocessing."""
+        """Remove raw_*.wav (and leftover sped_*/deessed_*) after postprocessing."""
         for seg in state.segments:
             final = self.step_dir / f"segment_{seg.id:04d}.wav"
             if not final.exists():
                 continue
-            for prefix in ("raw_", "sped_", "deessed_"):
+            for prefix in ("raw_", "sped_", "deessed_", "_sped_raw_"):
                 tmp = self.step_dir / f"{prefix}{seg.id:04d}.wav"
                 if tmp.exists():
                     tmp.unlink()

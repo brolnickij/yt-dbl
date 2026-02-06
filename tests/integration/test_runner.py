@@ -76,6 +76,13 @@ def _fake_translation(
     return {seg.id: f"[{target_language}] {seg.text}" for seg in segments}
 
 
+def _fake_postprocess_segment(input_path: Path, output_path: Path, **_kwargs: Any) -> Path:
+    """Mock postprocess_segment that creates the output file."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(b"fake-audio")
+    return output_path
+
+
 def _fake_tts_model() -> Any:
     """Return a fake TTS model whose generate() returns dummy audio."""
     import numpy as np
@@ -134,6 +141,12 @@ def _pipeline_patches(sep_dir: Path) -> Any:
     )
     stack.enter_context(
         patch("yt_dbl.utils.audio_processing.run_ffmpeg"),
+    )
+    stack.enter_context(
+        patch(
+            "yt_dbl.pipeline.synthesize.postprocess_segment",
+            side_effect=_fake_postprocess_segment,
+        ),
     )
     stack.enter_context(
         patch(
