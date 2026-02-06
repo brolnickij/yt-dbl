@@ -65,11 +65,11 @@ class Settings(BaseSettings):
 
     # ── Synthesis (TTS) ──────────────────────────────────────────────────────
     tts_model: str = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
-    tts_temperature: float = Field(default=0.6, ge=0.0, le=2.0)
-    tts_top_k: int = Field(default=20, ge=1)
-    tts_top_p: float = Field(default=0.8, ge=0.0, le=1.0)
+    tts_temperature: float = Field(default=0.9, ge=0.0, le=2.0)
+    tts_top_k: int = Field(default=50, ge=1)
+    tts_top_p: float = Field(default=1.0, ge=0.0, le=1.0)
     tts_repetition_penalty: float = Field(default=1.05, ge=1.0, le=2.0)
-    tts_sample_rate: int = 12000  # Qwen3-TTS native output rate
+    tts_sample_rate: int = 24000  # Qwen3-TTS native output rate (model.sample_rate)
 
     # ── Translation ─────────────────────────────────────────────────────────
     claude_model: str = "claude-opus-4-6"
