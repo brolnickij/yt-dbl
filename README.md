@@ -17,7 +17,7 @@ All ML inference (ASR, alignment, TTS) runs locally on Apple Silicon via [MLX](h
 
 ## Installation
 ```bash
-git clone git@github.com:lucidrains/BS-RoFormer.git && cd yt-dbl
+git clone git@github.com:brolnickij/yt-dbl.git && cd yt-dbl
 uv sync
 
 # API key (required for the translation step)
