@@ -108,7 +108,6 @@ class TestTranslateStepValidation:
         cfg = Settings(
             work_dir=tmp_path / "work",
             anthropic_api_key="",
-            _env_file=None,  # type: ignore[call-arg]
         )
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
         step = TranslateStep(settings=cfg, work_dir=step_dir)
@@ -303,15 +302,65 @@ class TestTranslateStepRun:
         assert state.segments[2].translated_text == ""
 
 
+# ── API error tests ─────────────────────────────────────────────────────────
+
+
+class TestTranslateAPIErrors:
+    def test_connection_error_propagates(self, tmp_path: Path) -> None:
+        """Network failures bubble up to the caller."""
+        step, _, state = _make_step(tmp_path)
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.create.side_effect = ConnectionError("network down")
+            mock_cls.return_value = mock_client
+
+            with pytest.raises(ConnectionError, match="network down"):
+                step.run(state)
+
+    def test_invalid_json_from_claude_raises(self, tmp_path: Path) -> None:
+        """If Claude returns non-JSON text, a JSONDecodeError propagates."""
+        step, _, state = _make_step(tmp_path)
+        content_block = MagicMock()
+        content_block.text = "Sorry, I cannot translate this."
+        response = MagicMock()
+        response.content = [content_block]
+        response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = response
+            mock_cls.return_value = mock_client
+
+            with pytest.raises(json.JSONDecodeError):
+                step.run(state)
+
+    def test_non_array_response_raises_translation_error(self, tmp_path: Path) -> None:
+        """If Claude returns valid JSON but not an array, TranslationError is raised."""
+        step, _, state = _make_step(tmp_path)
+        content_block = MagicMock()
+        content_block.text = '{"id": 0, "translated_text": "test"}'
+        response = MagicMock()
+        response.content = [content_block]
+        response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = response
+            mock_cls.return_value = mock_client
+
+            with pytest.raises(TranslationError, match="JSON array"):
+                step.run(state)
+
+
 # ── Config tests ────────────────────────────────────────────────────────────
 
 
 class TestTranslationConfig:
     def test_default_claude_model(self) -> None:
-        cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = Settings()
         assert cfg.claude_model == "claude-sonnet-4-5"
 
     def test_custom_model_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("YT_DBL_CLAUDE_MODEL", "claude-sonnet-4-5")
-        cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = Settings()
         assert cfg.claude_model == "claude-sonnet-4-5"
