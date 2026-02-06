@@ -7,26 +7,26 @@ requires-python = ">=3.11"
 license = "MIT"
 
 dependencies = [
-    "typer>=0.21",
-    "rich>=14.0",
-    "pydantic>=2.12",
+    "typer>=0.21.1",
+    "rich>=14.3.2",
+    "pydantic>=2.12.5",
     "pydantic-settings>=2.12",
-    "yt-dlp>=2026.0",
-    "audio-separator[cpu]>=0.41",
-    "mlx-audio>=0.3",
-    "anthropic>=0.52",
+    "yt-dlp>=2026.2",
+    "audio-separator[cpu]>=0.41.1",
+    "mlx-audio>=0.3.1",
+    "anthropic>=0.78",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.15",
-    "mypy>=1.19",
-    "pytest>=9.0",
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
     "pytest-cov>=7.0",
-    "pytest-randomly>=4.0",
+    "pytest-randomly>=4.0.1",
     "pytest-xdist>=3.8",
     "pytest-timeout>=2.4",
-    "pre-commit>=4.5",
+    "pre-commit>=4.5.1",
 ]
 
 [project.scripts]
