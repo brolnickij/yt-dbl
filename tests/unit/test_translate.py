@@ -378,7 +378,7 @@ class TestTranslationConfig:
 
     def test_default_translation_max_tokens(self) -> None:
         cfg = Settings()
-        assert cfg.translation_max_tokens == 16384
+        assert cfg.translation_max_tokens == 32768
 
     def test_custom_batch_size_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("YT_DBL_TRANSLATION_BATCH_SIZE", "500")
