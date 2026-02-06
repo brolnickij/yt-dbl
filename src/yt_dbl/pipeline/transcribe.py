@@ -13,7 +13,7 @@ import json
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from yt_dbl.pipeline.base import PipelineStep, StepValidationError
+from yt_dbl.pipeline.base import PipelineStep, StepValidationError, TranscriptionError
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, Word
 from yt_dbl.utils.languages import ALIGNER_LANGUAGE_MAP
 from yt_dbl.utils.logging import console, create_progress, log_info, suppress_library_noise
@@ -170,25 +170,28 @@ class TranscribeStep(PipelineStep):
         else:
             model = self._load_stt(model_name)
 
-        with console.status(
-            "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
-            spinner="dots",
-        ):
-            result = model.generate(
-                audio=str(vocals_path),
-                max_tokens=self.settings.transcription_max_tokens,
-                temperature=self.settings.transcription_temperature,
-            )
+        try:
+            with console.status(
+                "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
+                spinner="dots",
+            ):
+                result = model.generate(
+                    audio=str(vocals_path),
+                    max_tokens=self.settings.transcription_max_tokens,
+                    temperature=self.settings.transcription_temperature,
+                )
+        except TranscriptionError:
+            raise
+        except Exception as exc:
+            raise TranscriptionError(f"ASR model failed: {exc}") from exc
+        finally:
+            # If not managed, free manually
+            if self.model_manager is None:
+                del model
+                gc.collect()
 
         # VibeVoice key names vary across versions
-        raw_segments = self._normalise_asr_segments(result)
-
-        # If not managed, free manually
-        if self.model_manager is None:
-            del model
-            gc.collect()
-
-        return raw_segments
+        return self._normalise_asr_segments(result)
 
     @staticmethod
     def _load_stt(model_name: str) -> Any:

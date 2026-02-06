@@ -7,6 +7,7 @@ from yt_dbl.pipeline.base import (
     SeparationError,
     StepValidationError,
     SynthesisError,
+    TranscriptionError,
     TranslationError,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "SeparationError",
     "StepValidationError",
     "SynthesisError",
+    "TranscriptionError",
     "TranslationError",
 ]

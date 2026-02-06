@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from yt_dbl.config import Settings
-from yt_dbl.pipeline.base import StepValidationError
+from yt_dbl.pipeline.base import StepValidationError, TranscriptionError
 from yt_dbl.pipeline.transcribe import (
     SEGMENTS_FILE,
     TranscribeStep,
@@ -536,6 +536,19 @@ class TestTranscribeStepRun:
         mock_asr.assert_not_called()
         mock_align.assert_not_called()
         assert state.segments[0].text == "Cached"
+
+    @patch("yt_dbl.pipeline.transcribe.TranscribeStep._run_asr")
+    def test_run_asr_failure_raises_transcription_error(
+        self,
+        mock_asr: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """When _run_asr raises, the error is a TranscriptionError."""
+        step, _, state = _make_step(tmp_path)
+        mock_asr.side_effect = TranscriptionError("ASR model failed: OOM")
+
+        with pytest.raises(TranscriptionError, match="ASR model failed"):
+            step.run(state)
 
 
 # ── Config tests ────────────────────────────────────────────────────────────

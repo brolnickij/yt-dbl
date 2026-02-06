@@ -17,7 +17,7 @@ from yt_dbl.pipeline.assemble import (
     _assemble_video,
     _build_speech_track,
 )
-from yt_dbl.pipeline.base import StepValidationError
+from yt_dbl.pipeline.base import AssemblyError, StepValidationError
 from yt_dbl.schemas import (
     STEP_DIRS,
     PipelineState,
@@ -434,6 +434,23 @@ class TestAssembleVideo:
             idx = args.index("-b:a")
             assert args[idx + 1] == "320k"
 
+    def test_ffmpeg_failure_raises_assembly_error(self, tmp_path: Path) -> None:
+        """When ffmpeg fails, AssemblyError is raised with context."""
+        with (
+            patch(
+                "yt_dbl.pipeline.assemble.run_ffmpeg",
+                side_effect=subprocess.CalledProcessError(1, "ffmpeg", stderr="encode failed"),
+            ),
+            pytest.raises(AssemblyError, match="ffmpeg assembly failed"),
+        ):
+            _assemble_video(
+                video_path=tmp_path / "v.mp4",
+                speech_path=tmp_path / "s.wav",
+                background_path=tmp_path / "bg.wav",
+                output_path=tmp_path / "out.mp4",
+                background_volume=0.15,
+            )
+
 
 # ── Full run tests (mocked ffmpeg) ─────────────────────────────────────────
 
@@ -550,6 +567,24 @@ class TestGetTotalDuration:
         with patch("yt_dbl.pipeline.assemble.get_audio_duration", return_value=15.0):
             dur = step._get_total_duration(state, video_path)
         assert dur == 15.0
+
+    def test_ffprobe_failure_logs_warning(self, tmp_path: Path) -> None:
+        """When ffprobe fails, a warning is logged before falling back."""
+        step, _, state = _make_step(tmp_path)
+        state.meta = None
+        video_path = tmp_path / "v.mp4"
+
+        with (
+            patch(
+                "yt_dbl.pipeline.assemble.get_audio_duration",
+                side_effect=RuntimeError("no ffprobe"),
+            ),
+            patch("yt_dbl.pipeline.assemble.log_warning") as mock_warn,
+        ):
+            step._get_total_duration(state, video_path)
+
+        mock_warn.assert_called_once()
+        assert "v.mp4" in mock_warn.call_args[0][0]
 
     def test_from_segments_fallback(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)

@@ -33,6 +33,10 @@ class SeparationError(PipelineStepError):
     """Raised when audio separation fails."""
 
 
+class TranscriptionError(PipelineStepError):
+    """Raised when ASR transcription or forced alignment fails."""
+
+
 class TranslationError(PipelineStepError):
     """Raised when API translation fails or returns invalid data."""
 

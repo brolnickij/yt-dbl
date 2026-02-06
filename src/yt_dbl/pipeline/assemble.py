@@ -11,10 +11,10 @@ from __future__ import annotations
 from math import gcd
 from typing import TYPE_CHECKING
 
-from yt_dbl.pipeline.base import PipelineStep, StepValidationError
+from yt_dbl.pipeline.base import AssemblyError, PipelineStep, StepValidationError
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName, StepResult
 from yt_dbl.utils.audio import get_audio_duration, run_ffmpeg
-from yt_dbl.utils.logging import log_info
+from yt_dbl.utils.logging import log_info, log_warning
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -192,7 +192,10 @@ def _assemble_video(
         str(output_path),
     ]
 
-    run_ffmpeg(args)
+    try:
+        run_ffmpeg(args)
+    except Exception as exc:
+        raise AssemblyError(f"ffmpeg assembly failed: {exc}") from exc
     return output_path
 
 
@@ -300,8 +303,8 @@ class AssembleStep(PipelineStep):
         # Fallback: probe the video file
         try:
             return get_audio_duration(video_path)
-        except Exception:  # noqa: S110
-            pass
+        except Exception:
+            log_warning(f"Could not probe duration of {video_path.name}, using fallback")
         # Last resort: use the end of the last segment + buffer
         if state.segments:
             return max(seg.end for seg in state.segments) + 1.0
