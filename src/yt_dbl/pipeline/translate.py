@@ -21,29 +21,35 @@ TRANSLATIONS_FILE = "translations.json"
 SUBTITLES_FILE = "subtitles.srt"
 
 _SYSTEM_PROMPT = """\
-You are a professional dubbing translator. Your task is to translate video \
-transcript segments for voice dubbing.
+You are a professional dubbing translator. The translated text will be \
+read aloud by a TTS engine — optimize every translation for natural \
+spoken delivery.
 
 RULES:
 1. Translate each segment naturally into {target_language}.
-2. Preserve the speaker's register, tone, and style (formal/informal, \
-technical jargon, humor, etc.).
-3. Keep translations CONCISE — the translated text will be spoken by TTS \
-and must roughly fit the original segment's duration. Shorter is better \
-than longer.
-4. For each segment, consider: the original duration is {duration_hint}. \
-A good translation should be speakable within that time window.
-5. Maintain consistency of terminology across all segments.
-6. Do NOT translate proper nouns, brand names, or technical terms that are \
-commonly kept in the original language.
-{stress_rule}\
-7. Return ONLY a JSON array of objects, each with "id" (int) and \
-"translated_text" (string). No extra commentary.
-
-Example output:
+2. Preserve the speaker's register, tone, and style — formal/informal, \
+technical jargon, humor, sarcasm, etc.
+3. Keep translations CONCISE — they must fit the original segment's \
+duration when spoken aloud. Shorter is always better than longer.
+4. Segment durations: {duration_hint}. Each translation must be speakable \
+within its time window.
+5. Maintain consistent terminology and style across all segments.
+6. Do NOT translate proper nouns, brand names, or technical terms commonly \
+kept in the original language.
+7. Write ALL numbers, dates, and numeric expressions as full words \
+(e.g. "15%" → "fifteen percent", "2023" → "twenty twenty-three").
+8. Expand abbreviations and units into spoken forms \
+(e.g. "km/h" → "kilometers per hour"). For letter abbreviations, \
+separate letters with spaces (e.g. "FBI" → "F B I").
+9. Write for the EAR, not the eye: use short sentences, simple syntax, \
+natural conversational flow. Avoid bookish or formal written style.
+10. NEVER use characters that TTS cannot speak naturally: parentheses (), \
+brackets [], slashes /, quotation marks. Rephrase in plain words instead.
+{extra_rules}\
+OUTPUT FORMAT — return ONLY a raw JSON array, no markdown, no commentary:
 [
-  {{"id": 0, "translated_text": "Translated text here"}},
-  {{"id": 1, "translated_text": "Another translation"}}
+  {{"id": 0, "translated_text": "{example_translation}"}},
+  {{"id": 1, "translated_text": "Another segment translation"}}
 ]
 """
 
@@ -51,11 +57,14 @@ Example output:
 _STRESS_LANGUAGES = {"ru", "uk"}
 
 _STRESS_RULE = """\
-7. IMPORTANT — stress marks: place the Unicode combining acute accent \
-(U+0301) on the vowel that carries primary stress in EVERY word of 2+ \
-syllables. Example: "Францу́зская прокурату́ра прово́дит обы́ски". \
-This is critical for correct TTS pronunciation. Do NOT skip stress marks.
+11. CRITICAL — place Unicode combining acute accent (U+0301) on the \
+stressed vowel in EVERY word of 2+ syllables. \
+Example: "Францу́зская прокурату́ра прово́дит обы́ски в офи́сах". \
+Never omit stress marks — they directly control TTS pronunciation quality.
 """
+
+_STRESS_EXAMPLE = "Переведённый те́кст с ударе́ниями"
+_DEFAULT_EXAMPLE = "Translated text here"
 
 
 def _build_user_message(segments: list[Segment]) -> str:
@@ -199,11 +208,17 @@ class TranslateStep(PipelineStep):
         )
 
         duration_hint = _build_duration_hint(segments)
-        stress_rule = _STRESS_RULE if target_language in _STRESS_LANGUAGES else ""
+        if target_language in _STRESS_LANGUAGES:
+            extra_rules = _STRESS_RULE
+            example_translation = _STRESS_EXAMPLE
+        else:
+            extra_rules = ""
+            example_translation = _DEFAULT_EXAMPLE
         system_prompt = _SYSTEM_PROMPT.format(
             target_language=target_language,
             duration_hint=duration_hint,
-            stress_rule=stress_rule,
+            extra_rules=extra_rules,
+            example_translation=example_translation,
         )
         user_message = _build_user_message(segments)
 
