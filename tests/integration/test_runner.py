@@ -395,3 +395,25 @@ class TestEarlyValidation:
         with _pipeline_patches(sep_dir):
             state = runner.run(state)
         # Pipeline should run without raising
+
+
+class TestModelCleanup:
+    def test_models_unloaded_on_keyboard_interrupt(self, tmp_path: Path) -> None:
+        """Models are freed even if a step raises KeyboardInterrupt."""
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state = prefill_download(state, cfg)
+
+        runner = PipelineRunner(cfg)
+
+        with (
+            patch.object(runner.model_manager, "unload_all") as mock_unload,
+            patch(
+                "yt_dbl.pipeline.separate.SeparateStep.run",
+                side_effect=KeyboardInterrupt,
+            ),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            runner.run(state)
+
+        mock_unload.assert_called_once()

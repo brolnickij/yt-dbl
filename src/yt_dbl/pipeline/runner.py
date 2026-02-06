@@ -135,44 +135,45 @@ class PipelineRunner:
 
         started = not from_step
 
-        for step_name in STEP_ORDER:
-            # Skip until we reach from_step
-            if not started:
-                if step_name == from_step:
-                    started = True
-                else:
+        try:
+            for step_name in STEP_ORDER:
+                # Skip until we reach from_step
+                if not started:
+                    if step_name == from_step:
+                        started = True
+                    else:
+                        result = state.get_step(step_name)
+                        if result.status == StepStatus.COMPLETED:
+                            log_step_skip(step_name)
+                            continue
+
+                # Skip already completed steps (when resuming without from_step)
+                if from_step is None:
                     result = state.get_step(step_name)
                     if result.status == StepStatus.COMPLETED:
                         log_step_skip(step_name)
                         continue
 
-            # Skip already completed steps (when resuming without from_step)
-            if from_step is None:
-                result = state.get_step(step_name)
-                if result.status == StepStatus.COMPLETED:
-                    log_step_skip(step_name)
-                    continue
+                state = self._run_step(step_name, state)
 
-            state = self._run_step(step_name, state)
+                # Stop on failure
+                if state.get_step(step_name).status == StepStatus.FAILED:
+                    log_info("Pipeline stopped due to failure. Use 'resume' to retry.")
+                    break
 
-            # Stop on failure
-            if state.get_step(step_name).status == StepStatus.FAILED:
-                log_info("Pipeline stopped due to failure. Use 'resume' to retry.")
-                break
-
-        console.print()
-        if state.next_step is None:
-            console.rule("[bold green]Done![/bold green]")
-            outputs = state.get_step(StepName.ASSEMBLE).outputs
-            if "result" in outputs:
-                result_path = self.settings.job_dir(state.video_id) / outputs["result"]
-                console.print(f"  Result: [bold]{result_path}[/bold]")
-        else:
-            console.rule("[bold yellow]Incomplete[/bold yellow]")
-
-        # Free all models at the end of pipeline
-        self.model_manager.unload_all()
-        log_memory_status()
+            console.print()
+            if state.next_step is None:
+                console.rule("[bold green]Done![/bold green]")
+                outputs = state.get_step(StepName.ASSEMBLE).outputs
+                if "result" in outputs:
+                    result_path = self.settings.job_dir(state.video_id) / outputs["result"]
+                    console.print(f"  Result: [bold]{result_path}[/bold]")
+            else:
+                console.rule("[bold yellow]Incomplete[/bold yellow]")
+        finally:
+            # Free all models even on KeyboardInterrupt / unexpected errors
+            self.model_manager.unload_all()
+            log_memory_status()
 
         return state
 
