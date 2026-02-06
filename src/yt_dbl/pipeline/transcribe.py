@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, Word
-from yt_dbl.utils.logging import log_info
+from yt_dbl.utils.logging import console, create_progress, log_info
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -145,12 +145,15 @@ class TranscribeStep(PipelineStep):
         log_info(f"Loading ASR model: {model_name}")
         model = load_stt_model(model_name)
 
-        log_info("Running ASR + diarization...")
-        result = model.generate(
-            audio=str(vocals_path),
-            max_tokens=self.settings.transcription_max_tokens,
-            temperature=self.settings.transcription_temperature,
-        )
+        with console.status(
+            "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
+            spinner="dots",
+        ):
+            result = model.generate(
+                audio=str(vocals_path),
+                max_tokens=self.settings.transcription_max_tokens,
+                temperature=self.settings.transcription_temperature,
+            )
 
         # VibeVoice key names vary across versions
         raw_segments = self._normalise_asr_segments(result)
@@ -199,24 +202,29 @@ class TranscribeStep(PipelineStep):
 
         segments: list[Segment] = []
 
-        for idx, seg in enumerate(raw_segments):
-            text = seg["text"]
-            if not text.strip():
-                continue
+        progress = create_progress()
+        with progress:
+            task = progress.add_task("  Aligning segments", total=len(raw_segments))
+            for idx, seg in enumerate(raw_segments):
+                text = seg["text"]
+                if not text.strip():
+                    progress.advance(task)
+                    continue
 
-            words = self._align_segment(aligner, vocals_path, seg, lang_full)
+                words = self._align_segment(aligner, vocals_path, seg, lang_full)
 
-            segments.append(
-                Segment(
-                    id=idx,
-                    text=text,
-                    start=seg["start"],
-                    end=seg["end"],
-                    speaker=f"SPEAKER_{seg['speaker_id']:02d}",
-                    language=lang_full.lower()[:2],
-                    words=words,
+                segments.append(
+                    Segment(
+                        id=idx,
+                        text=text,
+                        start=seg["start"],
+                        end=seg["end"],
+                        speaker=f"SPEAKER_{seg['speaker_id']:02d}",
+                        language=lang_full.lower()[:2],
+                        words=words,
+                    )
                 )
-            )
+                progress.advance(task)
 
         # Free GPU memory
         del aligner

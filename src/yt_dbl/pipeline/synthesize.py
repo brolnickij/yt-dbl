@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from yt_dbl.pipeline.base import PipelineStep
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName
 from yt_dbl.utils.audio import get_audio_duration, run_ffmpeg
-from yt_dbl.utils.logging import log_info
+from yt_dbl.utils.logging import create_progress, log_info
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -243,67 +243,72 @@ class SynthesizeStep(PipelineStep):
         """Run TTS for each segment using speaker's voice reference."""
         model = self._load_tts_model()
         lang = _TTS_LANG_MAP.get(state.target_language, "auto")
+        total = len(state.segments)
 
+        progress = create_progress()
         try:
-            for seg in state.segments:
-                raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
-                if raw_path.exists():
+            with progress:
+                task = progress.add_task("  Synthesizing TTS", total=total)
+                for seg in state.segments:
+                    raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
+                    if raw_path.exists():
+                        seg.synth_path = raw_path.name
+                        progress.advance(task)
+                        continue
+
+                    text = seg.translated_text or seg.text
+                    ref_path = refs.get(seg.speaker)
+                    spk = self._speaker_by_id(state, seg.speaker)
+                    ref_text = _find_ref_text_for_speaker(state.segments, spk)
+
+                    audio = self._run_tts(model, text, ref_path, ref_text, lang)
+                    self._save_wav(audio, raw_path, self.settings.tts_sample_rate)
                     seg.synth_path = raw_path.name
-                    continue
-
-                text = seg.translated_text or seg.text
-                ref_path = refs.get(seg.speaker)
-                spk = self._speaker_by_id(state, seg.speaker)
-                ref_text = _find_ref_text_for_speaker(state.segments, spk)
-
-                audio = self._run_tts(model, text, ref_path, ref_text, lang)
-                self._save_wav(audio, raw_path, self.settings.tts_sample_rate)
-                seg.synth_path = raw_path.name
-
-                log_info(f"  seg {seg.id}: {len(text)} chars → {raw_path.name}")
+                    progress.advance(task)
         finally:
             del model
             gc.collect()
 
     def _postprocess_segments(self, state: PipelineState) -> None:
         """Speed-adjust and normalize each synthesized segment."""
-        for seg in state.segments:
-            raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
-            final_path = self.step_dir / f"segment_{seg.id:04d}.wav"
+        progress = create_progress()
+        with progress:
+            task = progress.add_task("  Postprocessing", total=len(state.segments))
+            for seg in state.segments:
+                raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
+                final_path = self.step_dir / f"segment_{seg.id:04d}.wav"
 
-            if final_path.exists():
+                if final_path.exists():
+                    seg.synth_path = final_path.name
+                    progress.advance(task)
+                    continue
+
+                if not raw_path.exists():
+                    progress.advance(task)
+                    continue
+
+                # Check if we need to speed up
+                synth_dur = get_audio_duration(raw_path)
+                original_dur = seg.duration
+                speed_factor = 1.0
+
+                if synth_dur > original_dur > 0:
+                    speed_factor = synth_dur / original_dur
+                    max_speed = self.settings.max_speed_factor
+                    speed_factor = min(speed_factor, max_speed)
+
+                # Apply speed + normalise
+                _speed_threshold = 1.01
+                if speed_factor > _speed_threshold:
+                    sped_path = self.step_dir / f"sped_{seg.id:04d}.wav"
+                    _speed_up_audio(raw_path, sped_path, speed_factor)
+                    _normalize_loudness(sped_path, final_path)
+                    seg.synth_speed_factor = round(speed_factor, 3)
+                else:
+                    _normalize_loudness(raw_path, final_path)
+
                 seg.synth_path = final_path.name
-                continue
-
-            if not raw_path.exists():
-                continue
-
-            # Check if we need to speed up
-            synth_dur = get_audio_duration(raw_path)
-            original_dur = seg.duration
-            speed_factor = 1.0
-
-            if synth_dur > original_dur > 0:
-                speed_factor = synth_dur / original_dur
-                max_speed = self.settings.max_speed_factor
-                if speed_factor > max_speed:
-                    log_info(
-                        f"  seg {seg.id}: speed {speed_factor:.2f}x exceeds "
-                        f"max {max_speed:.1f}x — clamping"
-                    )
-                    speed_factor = max_speed
-
-            # Apply speed + normalise
-            _speed_threshold = 1.01
-            if speed_factor > _speed_threshold:
-                sped_path = self.step_dir / f"sped_{seg.id:04d}.wav"
-                _speed_up_audio(raw_path, sped_path, speed_factor)
-                _normalize_loudness(sped_path, final_path)
-                seg.synth_speed_factor = round(speed_factor, 3)
-            else:
-                _normalize_loudness(raw_path, final_path)
-
-            seg.synth_path = final_path.name
+                progress.advance(task)
 
     # ── TTS model ───────────────────────────────────────────────────────────
 
