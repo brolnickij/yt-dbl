@@ -437,7 +437,7 @@ class TestBatchedTranslation:
         trans.outputs = {"segments": "segments.json"}
 
         def make_response_for_batch(
-            *, model: str, max_tokens: int, system: str, messages: list
+            *, model: str, max_tokens: int, system: str, messages: list[dict[str, str]]
         ) -> MagicMock:
             user_msg = messages[0]["content"]
             items = json.loads(user_msg)

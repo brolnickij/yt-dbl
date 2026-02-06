@@ -17,7 +17,8 @@ class TestCleanupGpuMemory:
 
     def test_survives_no_gpu_libraries(self) -> None:
         """Should not crash if neither mlx nor torch are installed."""
-        cleanup_gpu_memory()  # must not raise
+        with patch.dict("sys.modules", {"mlx": None, "mlx.core": None, "torch": None}):
+            cleanup_gpu_memory()  # must not raise
 
     def test_clears_mlx_metal_cache(self) -> None:
         try:
@@ -49,7 +50,10 @@ class TestCleanupGpuMemory:
         mock_torch = MagicMock()
         mock_torch.backends.mps.is_available.return_value = True
         mock_torch.cuda.is_available.return_value = True
-        with patch.dict("sys.modules", {"torch": mock_torch}):
+        with patch.dict(
+            "sys.modules",
+            {"mlx": None, "mlx.core": None, "torch": mock_torch},
+        ):
             cleanup_gpu_memory()
         mock_torch.mps.empty_cache.assert_called_once()
         mock_torch.cuda.empty_cache.assert_not_called()

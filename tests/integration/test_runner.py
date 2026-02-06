@@ -125,7 +125,7 @@ def _pipeline_patches(sep_dir: Path) -> Any:
     )
     stack.enter_context(
         patch(
-            "yt_dbl.pipeline.translate.TranslateStep._translate",
+            "yt_dbl.pipeline.translate.TranslateStep._translate_all",
             side_effect=_fake_translation,
         )
     )
