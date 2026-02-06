@@ -6,6 +6,7 @@ import re
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from yt_dbl.cli import _extract_video_id, _step_name_from_str, app
@@ -68,21 +69,19 @@ class TestCLI:
 class TestExtractVideoId:
     """Unit tests for _extract_video_id helper."""
 
-    def test_standard_url(self) -> None:
-        assert _extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
-
-    def test_short_url(self) -> None:
-        assert _extract_video_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
-
-    def test_shorts_url(self) -> None:
-        assert _extract_video_id("https://youtube.com/shorts/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
-
-    def test_embed_url(self) -> None:
-        assert _extract_video_id("https://youtube.com/v/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
-
-    def test_url_with_extra_params(self) -> None:
-        vid = _extract_video_id("https://www.youtube.com/watch?v=abcdefghijk&list=PL123")
-        assert vid == "abcdefghijk"
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+            ("https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+            ("https://youtube.com/shorts/dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+            ("https://youtube.com/v/dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+            ("https://www.youtube.com/watch?v=abcdefghijk&list=PL123", "abcdefghijk"),
+        ],
+        ids=["standard", "short", "shorts", "embed", "extra-params"],
+    )
+    def test_extracts_id(self, url: str, expected: str) -> None:
+        assert _extract_video_id(url) == expected
 
     def test_fallback_sanitizes(self) -> None:
         """Non-YouTube URL should be sanitized as fallback."""
@@ -92,12 +91,19 @@ class TestExtractVideoId:
 
 
 class TestStepNameFromStr:
-    def test_valid_step(self) -> None:
-        assert _step_name_from_str("download") == StepName.DOWNLOAD
-        assert _step_name_from_str("TRANSLATE") == StepName.TRANSLATE
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("download", StepName.DOWNLOAD),
+            ("TRANSLATE", StepName.TRANSLATE),
+            ("separate", StepName.SEPARATE),
+        ],
+        ids=["lowercase", "uppercase", "another-step"],
+    )
+    def test_valid_step(self, value: str, expected: StepName) -> None:
+        assert _step_name_from_str(value) == expected
 
     def test_invalid_step(self) -> None:
-        import pytest
         import typer
 
         with pytest.raises(typer.BadParameter, match="nonexistent"):

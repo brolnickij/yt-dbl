@@ -183,11 +183,18 @@ class TestParseTranslations:
 
 
 class TestSRTGeneration:
-    def test_format_srt_time(self) -> None:
-        assert _format_srt_time(0.0) == "00:00:00,000"
-        assert _format_srt_time(3.5) == "00:00:03,500"
-        assert _format_srt_time(65.123) == "00:01:05,123"
-        assert _format_srt_time(3661.0) == "01:01:01,000"
+    @pytest.mark.parametrize(
+        ("seconds", "expected"),
+        [
+            (0.0, "00:00:00,000"),
+            (3.5, "00:00:03,500"),
+            (65.123, "00:01:05,123"),
+            (3661.0, "01:01:01,000"),
+        ],
+        ids=["zero", "fractional", "over-minute", "over-hour"],
+    )
+    def test_format_srt_time(self, seconds: float, expected: str) -> None:
+        assert _format_srt_time(seconds) == expected
 
     def test_generate_srt_uses_translated_text(self, tmp_path: Path) -> None:
         segments = _make_segments()
