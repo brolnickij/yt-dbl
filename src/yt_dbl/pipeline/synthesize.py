@@ -344,14 +344,12 @@ class SynthesizeStep(PipelineStep):
     @staticmethod
     def _save_wav(audio: Any, path: Path, sample_rate: int) -> None:
         """Write an mlx array to a WAV file."""
-        import mlx.core as mx
         import numpy as np
         import soundfile as sf
 
-        # Convert mlx array -> numpy
-        data = audio.tolist() if isinstance(audio, mx.array) else audio
-
-        arr = np.array(data, dtype=np.float32)
+        # Fast path: mlx array → numpy via the buffer protocol (zero-copy
+        # when contiguous).  Falls back to np.asarray for plain arrays.
+        arr = np.asarray(audio, dtype=np.float32)
         if arr.ndim > 1:
             arr = arr.squeeze()
         sf.write(str(path), arr, sample_rate)
