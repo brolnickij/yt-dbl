@@ -133,13 +133,19 @@ class DownloadStep(PipelineStep):
                 stderr=subprocess.STDOUT,
                 text=True,
             )
+        except FileNotFoundError as exc:
+            raise DownloadError("yt-dlp not found. Install it: brew install yt-dlp") from exc
 
+        if proc.stdout is None:  # pragma: no cover
+            proc.kill()
+            proc.wait()
+            msg = "stdout pipe was not opened"
+            raise DownloadError(msg)
+
+        try:
             with create_progress() as progress:
                 task = progress.add_task("Downloading", total=100)
 
-                if proc.stdout is None:  # pragma: no cover
-                    msg = "stdout pipe was not opened"
-                    raise DownloadError(msg)
                 for raw_line in proc.stdout:
                     line = raw_line.strip()
                     # Parse yt-dlp progress lines like "[download]  45.2% of ..."
@@ -154,11 +160,13 @@ class DownloadStep(PipelineStep):
                 progress.update(task, completed=100)
 
             return_code = proc.wait()
-            if return_code != 0:
-                raise DownloadError(f"yt-dlp exited with code {return_code}")
+        except BaseException:
+            proc.kill()
+            proc.wait()
+            raise
 
-        except FileNotFoundError as exc:
-            raise DownloadError("yt-dlp not found. Install it: brew install yt-dlp") from exc
+        if return_code != 0:
+            raise DownloadError(f"yt-dlp exited with code {return_code}")
 
         if not output_path.exists():
             raise DownloadError("yt-dlp finished but output file not found")

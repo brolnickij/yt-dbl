@@ -175,6 +175,24 @@ class TestDownloadVideo:
         with pytest.raises(DownloadError, match="exited with code 1"):
             step._download_video("https://youtube.com/watch?v=x", step_dir / "video.mp4")
 
+    @patch("subprocess.Popen")
+    def test_kills_process_on_unexpected_error(self, mock_popen: MagicMock, tmp_path: Path) -> None:
+        """If an unexpected error occurs while reading stdout, yt-dlp is killed."""
+        proc = MagicMock()
+        proc.stdout = iter(["boom"])
+        # Simulate the progress bar raising an unexpected error
+        proc.wait.side_effect = RuntimeError("unexpected")
+        mock_popen.return_value = proc
+
+        cfg = Settings(work_dir=tmp_path / "work")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
+        step = DownloadStep(settings=cfg, work_dir=step_dir)
+
+        with pytest.raises(RuntimeError, match="unexpected"):
+            step._download_video("https://youtube.com/watch?v=x", step_dir / "video.mp4")
+
+        proc.kill.assert_called_once()
+
 
 class TestDownloadStepOutputVerification:
     """Verify that run() checks output presence."""
