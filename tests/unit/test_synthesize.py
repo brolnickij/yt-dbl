@@ -368,6 +368,92 @@ class TestSynthesizeStepRun:
         ):
             step.run(state)
 
+    def test_postprocess_failure_raises_synthesis_error(self, tmp_path: Path) -> None:
+        """When postprocessing fails for some segments, SynthesisError is raised."""
+        step, _, state = _make_step(tmp_path)
+
+        mock_model = MagicMock()
+        call_count = 0
+
+        def _failing_postprocess(input_path: Path, output_path: Path, **_kw: Any) -> Path:
+            nonlocal call_count
+            call_count += 1
+            if "0001" in str(input_path):
+                raise RuntimeError("ffmpeg segfault")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"fake-audio")
+            return output_path
+
+        with (
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _fake_run_tts,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.extract_voice_reference",
+                side_effect=lambda *a, **kw: Path(a[2]).write_bytes(b"fake-ref") or a[2],
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.postprocess_segment",
+                side_effect=_failing_postprocess,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.get_audio_duration",
+                return_value=1.0,
+            ),
+            pytest.raises(SynthesisError, match="1 segment"),
+        ):
+            step.run(state)
+
+        # Other segments should still have been processed
+        assert call_count == 3
+
+    def test_postprocess_all_fail_reports_all_ids(self, tmp_path: Path) -> None:
+        """When all segments fail, the error lists all failed IDs."""
+        step, _, state = _make_step(tmp_path)
+
+        mock_model = MagicMock()
+
+        def _all_fail(input_path: Path, output_path: Path, **_kw: Any) -> Path:
+            raise RuntimeError("boom")
+
+        with (
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _fake_run_tts,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.extract_voice_reference",
+                side_effect=lambda *a, **kw: Path(a[2]).write_bytes(b"fake-ref") or a[2],
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.postprocess_segment",
+                side_effect=_all_fail,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.get_audio_duration",
+                return_value=1.0,
+            ),
+            pytest.raises(SynthesisError, match="3 segment"),
+        ):
+            step.run(state)
+
 
 # ── Config tests ────────────────────────────────────────────────────────────
 

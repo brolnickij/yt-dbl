@@ -22,7 +22,7 @@ from yt_dbl.utils.audio_processing import (
     postprocess_segment,
 )
 from yt_dbl.utils.languages import TTS_LANG_MAP
-from yt_dbl.utils.logging import create_progress, log_info, suppress_library_noise
+from yt_dbl.utils.logging import create_progress, log_info, log_warning, suppress_library_noise
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -204,15 +204,28 @@ class SynthesizeStep(PipelineStep):
 
             # Parallel postprocessing: each segment is independent
             max_workers = min(os.cpu_count() or 1, len(to_process))
+            failed: list[tuple[int, str]] = []
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 futures = {pool.submit(self._postprocess_one, seg): seg for seg in to_process}
                 for future in as_completed(futures):
                     seg = futures[future]
-                    synth_path, speed_factor = future.result()
+                    try:
+                        synth_path, speed_factor = future.result()
+                    except Exception as exc:
+                        failed.append((seg.id, str(exc)))
+                        log_warning(f"Postprocessing failed for segment {seg.id}: {exc}")
+                        progress.advance(task)
+                        continue
                     seg.synth_path = synth_path
                     if speed_factor is not None:
                         seg.synth_speed_factor = speed_factor
                     progress.advance(task)
+
+        if failed:
+            ids = [str(seg_id) for seg_id, _ in failed]
+            raise SynthesisError(
+                f"Postprocessing failed for {len(failed)} segment(s): {', '.join(ids)}"
+            )
 
     def _postprocess_one(self, seg: Segment) -> tuple[str, float | None]:
         """Postprocess a single segment: speed-adjust + loudness-normalize + de-ess.
