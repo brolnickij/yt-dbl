@@ -57,7 +57,11 @@ class TestCLI:
         assert result.exit_code == 0
 
     def test_models_download(self) -> None:
-        result = runner.invoke(app, ["models", "download"])
+        with patch(
+            "yt_dbl.models.registry.check_model_downloaded",
+            return_value=True,
+        ):
+            result = runner.invoke(app, ["models", "download"])
         assert result.exit_code == 0
 
 

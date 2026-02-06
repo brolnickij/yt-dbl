@@ -254,7 +254,7 @@ class TestPipelineRunner:
 
     def test_step_failure_stops_pipeline(self, tmp_path: Path) -> None:
         """When a step raises, its status becomes FAILED and pipeline stops."""
-        cfg = Settings(work_dir=tmp_path / "work")
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
@@ -290,7 +290,7 @@ class TestPipelineRunner:
 
     def test_checkpoint_saved_on_failure(self, tmp_path: Path) -> None:
         """Failed state should also be persisted."""
-        cfg = Settings(work_dir=tmp_path / "work")
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
