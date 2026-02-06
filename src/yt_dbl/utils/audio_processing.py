@@ -89,20 +89,12 @@ def speed_up_audio(
         )
     else:
         # Fallback: atempo (0.5-100.0 range per filter)
-        _max_atempo = 100.0
-        filters: list[str] = []
-        remaining = factor
-        while remaining > _max_atempo:
-            filters.append(f"atempo={_max_atempo}")
-            remaining /= _max_atempo
-        filters.append(f"atempo={remaining:.4f}")
-
         run_ffmpeg(
             [
                 "-i",
                 str(input_path),
                 "-filter:a",
-                ",".join(filters),
+                _atempo_chain(factor),
                 str(output_path),
             ]
         )
