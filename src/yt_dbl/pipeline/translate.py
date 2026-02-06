@@ -9,6 +9,8 @@ within the model's output token limit.
 from __future__ import annotations
 
 import json
+from functools import lru_cache
+from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep, StepValidationError, TranslationError
@@ -21,47 +23,13 @@ if TYPE_CHECKING:
 TRANSLATIONS_FILE = "translations.json"
 SUBTITLES_FILE = "subtitles.srt"
 
-_SYSTEM_PROMPT = """\
-You are a professional dubbing translator. The translated text will be \
-read aloud by a TTS engine — optimize every translation for natural \
-spoken delivery.
+_PROMPT_PATH = _Path(__file__).with_name("translate_prompt.txt")
 
-SOURCE: {source_language}
-TARGET: {target_language}
 
-RULES:
-1. Translate each segment naturally from {source_language} into {target_language}.
-2. Preserve the speaker's register, tone, and style — formal/informal, \
-technical jargon, humor, sarcasm, etc.
-3. Keep translations CONCISE — they must fit the original segment's \
-duration when spoken aloud. Shorter is always better than longer.
-4. Segment durations: {duration_hint}. Each translation must be speakable \
-within its time window.
-5. Maintain consistent terminology and style across all segments.
-6. Do NOT translate proper nouns, brand names, or technical terms commonly \
-kept in the original language.
-7. Write ALL numbers, dates, and numeric expressions as full words \
-(e.g. "15%" → "fifteen percent", "2023" → "twenty twenty-three").
-8. Expand abbreviations and units into spoken forms \
-(e.g. "km/h" → "kilometers per hour"). For letter abbreviations, \
-separate letters with spaces (e.g. "FBI" → "F B I").
-9. Write for the EAR, not the eye: use short sentences, simple syntax, \
-natural conversational flow. Avoid bookish or formal written style.
-10. NEVER use characters that TTS cannot speak naturally: parentheses (), \
-brackets [], slashes /, quotation marks. Rephrase in plain words instead.
-11. SPLIT long sentences into SHORT ones (max 10-12 words each). \
-TTS produces the best pronunciation on short, simple sentences. \
-Use periods instead of semicolons or complex conjunctions.
-12. For Russian: ALWAYS use the letter «е» where it belongs \
-(«все» not «все» when meaning "everything", «еще» not «еще», \
-«ее» not «ее» when meaning "her/hers", etc.). \
-This helps TTS place stress correctly.
-OUTPUT FORMAT — return ONLY a raw JSON array, no markdown, no commentary:
-[
-  {{"id": 0, "translated_text": "Translated text here"}},
-  {{"id": 1, "translated_text": "Another segment translation"}}
-]
-"""
+@lru_cache(maxsize=1)
+def _load_system_prompt() -> str:
+    """Load the translation system prompt template from disk (cached)."""
+    return _PROMPT_PATH.read_text(encoding="utf-8").rstrip("\n")
 
 
 def _build_user_message(segments: list[Segment]) -> str:
@@ -232,7 +200,7 @@ class TranslateStep(PipelineStep):
         )
 
         duration_hint = _build_duration_hint(segments)
-        system_prompt = _SYSTEM_PROMPT.format(
+        system_prompt = _load_system_prompt().format(
             target_language=target_language,
             source_language=source_language,
             duration_hint=duration_hint,

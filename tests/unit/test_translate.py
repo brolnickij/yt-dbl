@@ -18,6 +18,7 @@ from yt_dbl.pipeline.translate import (
     _build_user_message,
     _format_srt_time,
     _generate_srt,
+    _load_system_prompt,
     _parse_translations,
 )
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName, StepStatus, Word
@@ -144,6 +145,26 @@ class TestBuildMessage:
 
     def test_duration_hint_empty(self) -> None:
         assert _build_duration_hint([]) == "unknown"
+
+    def test_system_prompt_loads_and_formats(self) -> None:
+        """The external prompt template can be loaded and formatted."""
+        template = _load_system_prompt()
+        assert "{source_language}" in template
+        assert "{target_language}" in template
+        assert "{duration_hint}" in template
+
+        rendered = template.format(
+            source_language="en",
+            target_language="ru",
+            duration_hint="1.0-5.0s (avg 3.0s)",
+        )
+        assert "en" in rendered
+        assert "ru" in rendered
+        assert "1.0-5.0s" in rendered
+        # No unresolved placeholders remain (format fields like {foo})
+        assert "{source_language}" not in rendered
+        assert "{target_language}" not in rendered
+        assert "{duration_hint}" not in rendered
 
 
 # ── Parse translations tests ────────────────────────────────────────────────
