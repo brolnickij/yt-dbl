@@ -82,6 +82,10 @@ class SeparateStep(PipelineStep):
 
         Uses ONNX Runtime with CoreML acceleration on Apple Silicon (M4 Pro).
         This method is deliberately separate for testability.
+
+        Note: audio-separator models are NOT managed by ModelManager because
+        they use a different lifecycle (Separator object owns the model).
+        We still track memory and clean up properly.
         """
         from audio_separator.separator import Separator
 
