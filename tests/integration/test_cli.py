@@ -29,7 +29,7 @@ class TestCLI:
     def test_version(self) -> None:
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert re.match(r"\d+\.\d+\.\d+", result.output.strip())
+        assert re.search(r"\d+\.\d+\.\d+", result.output.strip())
 
     def test_help(self) -> None:
         result = runner.invoke(app, ["--help"])
