@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep, StepValidationError, TranslationError
 from yt_dbl.schemas import PipelineState, Segment, StepName
-from yt_dbl.utils.logging import log_info
+from yt_dbl.utils.logging import log_info, log_warning
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -51,9 +51,9 @@ brackets [], slashes /, quotation marks. Rephrase in plain words instead.
 11. SPLIT long sentences into SHORT ones (max 10-12 words each). \
 TTS produces the best pronunciation on short, simple sentences. \
 Use periods instead of semicolons or complex conjunctions.
-12. For Russian: ALWAYS use the letter «ё» where it belongs \
-(«всё» not «все» when meaning "everything", «ещё» not «еще», \
-«её» not «ее» when meaning "her/hers", etc.). \
+12. For Russian: ALWAYS use the letter «е» where it belongs \
+(«все» not «все» when meaning "everything", «еще» not «еще», \
+«ее» not «ее» when meaning "her/hers", etc.). \
 This helps TTS place stress correctly.
 OUTPUT FORMAT — return ONLY a raw JSON array, no markdown, no commentary:
 [
@@ -174,7 +174,7 @@ class TranslateStep(PipelineStep):
                 missing.append(seg.id)
 
         if missing:
-            log_info(f"Warning: {len(missing)} segments have no translation: {missing}")
+            log_warning(f"{len(missing)} segments have no translation: {missing}")
 
         # Persist
         self._save(translations_path, translations)

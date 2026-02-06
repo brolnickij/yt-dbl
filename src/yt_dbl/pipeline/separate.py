@@ -15,6 +15,10 @@ if TYPE_CHECKING:
 
 __all__ = ["SeparateStep"]
 
+# Standard output filenames
+VOCALS_FILENAME = "vocals.wav"
+BACKGROUND_FILENAME = "background.wav"
+
 # Stem labels used by audio-separator
 _VOCALS_LABEL = "Vocals"
 _INSTRUMENTAL_LABEL = "Instrumental"
@@ -23,9 +27,6 @@ _INSTRUMENTAL_LABEL = "Instrumental"
 class SeparateStep(PipelineStep):
     name = StepName.SEPARATE
     description = "Separate vocals from background"
-
-    VOCALS_FILENAME = "vocals.wav"
-    BACKGROUND_FILENAME = "background.wav"
 
     def validate_inputs(self, state: PipelineState) -> None:
         dl = state.get_step(StepName.DOWNLOAD)
@@ -36,8 +37,8 @@ class SeparateStep(PipelineStep):
             raise StepValidationError(f"Audio file not found: {audio_path}")
 
     def run(self, state: PipelineState) -> PipelineState:
-        vocals_path = self.step_dir / self.VOCALS_FILENAME
-        background_path = self.step_dir / self.BACKGROUND_FILENAME
+        vocals_path = self.step_dir / VOCALS_FILENAME
+        background_path = self.step_dir / BACKGROUND_FILENAME
 
         # Idempotency: skip if both outputs already exist
         if vocals_path.exists() and background_path.exists():
@@ -60,8 +61,8 @@ class SeparateStep(PipelineStep):
 
         result = state.get_step(self.name)
         result.outputs = {
-            "vocals": self.VOCALS_FILENAME,
-            "background": self.BACKGROUND_FILENAME,
+            "vocals": VOCALS_FILENAME,
+            "background": BACKGROUND_FILENAME,
         }
         return state
 
@@ -124,8 +125,8 @@ class SeparateStep(PipelineStep):
 
         We rename them to vocals.wav and background.wav.
         """
-        vocals_path = self.step_dir / self.VOCALS_FILENAME
-        background_path = self.step_dir / self.BACKGROUND_FILENAME
+        vocals_path = self.step_dir / VOCALS_FILENAME
+        background_path = self.step_dir / BACKGROUND_FILENAME
 
         vocals_found = False
         instrumental_found = False

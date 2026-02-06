@@ -19,10 +19,17 @@ if TYPE_CHECKING:
     from yt_dbl.schemas import Speaker
 
 __all__ = [
+    "SPEED_THRESHOLD",
     "extract_voice_reference",
     "postprocess_segment",
     "speed_up_audio",
 ]
+
+# Minimum speed factor to trigger time-stretching (avoids no-op ffmpeg calls)
+SPEED_THRESHOLD = 1.01
+
+# Loudnorm target: -16 LUFS integrated, -1.5 dBTP, 11 LU range
+_LOUDNORM_TARGET = "I=-16:TP=-1.5:LRA=11"
 
 # ── Voice reference extraction ──────────────────────────────────────────────
 
@@ -141,7 +148,7 @@ def _loudnorm_apply_filter(stats: dict[str, str] | None) -> str:
     """Build the loudnorm apply filter (pass 2) from measured stats."""
     if stats:
         return (
-            f"loudnorm=I=-16:TP=-1.5:LRA=11"
+            f"loudnorm={_LOUDNORM_TARGET}"
             f":measured_I={stats['input_i']}"
             f":measured_TP={stats['input_tp']}"
             f":measured_LRA={stats['input_lra']}"
@@ -149,7 +156,7 @@ def _loudnorm_apply_filter(stats: dict[str, str] | None) -> str:
             f":offset={stats['target_offset']}"
             f":linear=true"
         )
-    return "loudnorm=I=-16:TP=-1.5:LRA=11"
+    return f"loudnorm={_LOUDNORM_TARGET}"
 
 
 def postprocess_segment(
@@ -167,7 +174,7 @@ def postprocess_segment(
     - **atempo:**    2 calls (speed+measure → speed+apply+deess), 0 temp files
       (atempo is cheap enough to run twice).
     """
-    _speed_threshold = 1.01
+    _speed_threshold = SPEED_THRESHOLD
     needs_speed = speed_factor is not None and speed_factor > _speed_threshold
 
     speed_prefix = ""
@@ -190,7 +197,7 @@ def postprocess_segment(
             speed_prefix = _atempo_chain(speed_factor) + ","
 
     # Pass 1: measure loudness
-    measure_filter = f"{speed_prefix}loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json"
+    measure_filter = f"{speed_prefix}loudnorm={_LOUDNORM_TARGET}:print_format=json"
     measure = run_ffmpeg(
         ["-i", str(measure_input), "-filter:a", measure_filter, "-f", "null", "/dev/null"],
         check=False,

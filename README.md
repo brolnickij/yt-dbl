@@ -1,11 +1,11 @@
 # yt-dbl
-CLI-инструмент для автоматического дубляжа YouTube-видео с клонированием голоса
-
-Весь ML-inference (ASR, alignment, TTS) выполняется локально на Apple Silicon через [MLX](https://github.com/ml-explore/mlx). Для перевода используется Claude API. Результат — видеофайл с озвучкой голосом оригинального спикера на целевом языке
-
 > [!WARNING]
 > Работает **только на Apple Silicon** (M1/M2/M3/M4), весь ML-inference выполняется через MLX на Metal GPU
 > Тестировалось на **M4 Pro** (20-core GPU, 48 GB unified memory)
+
+CLI-инструмент для автоматического дубляжа YouTube-видео с клонированием голоса
+
+Весь ML-inference (ASR, alignment, TTS) выполняется локально на Apple Silicon через [MLX](https://github.com/ml-explore/mlx). Для перевода используется Claude API. Результат — видеофайл с озвучкой голосом оригинального спикера на целевом языке
 
 ## Как это работает
 ```

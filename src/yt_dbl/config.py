@@ -114,6 +114,7 @@ class Settings(BaseSettings):
     sample_rate: int = 48000
 
     # ── Separation ──────────────────────────────────────────────────────────
+    # NB: default duplicates registry.SEPARATOR_MODEL (circular import)
     separation_model: str = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
     separation_segment_size: int = Field(default=256, ge=64, le=512)
     separation_overlap: int = Field(default=8, ge=2, le=50)

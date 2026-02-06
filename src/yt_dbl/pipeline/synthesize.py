@@ -17,6 +17,7 @@ from yt_dbl.pipeline.base import PipelineStep, StepValidationError, SynthesisErr
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName
 from yt_dbl.utils.audio import get_audio_duration
 from yt_dbl.utils.audio_processing import (
+    SPEED_THRESHOLD,
     extract_voice_reference,
     postprocess_segment,
 )
@@ -230,8 +231,7 @@ class SynthesizeStep(PipelineStep):
 
         if synth_dur > original_dur > 0:
             factor = min(synth_dur / original_dur, self.settings.max_speed_factor)
-            _speed_threshold = 1.01
-            if factor > _speed_threshold:
+            if factor > SPEED_THRESHOLD:
                 speed = factor
 
         postprocess_segment(raw_path, final_path, speed_factor=speed)

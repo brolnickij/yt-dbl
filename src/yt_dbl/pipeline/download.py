@@ -14,6 +14,9 @@ from yt_dbl.utils.logging import create_progress, log_info
 if TYPE_CHECKING:
     from pathlib import Path
 
+VIDEO_FILENAME = "video.mp4"
+AUDIO_FILENAME = "audio.wav"
+
 
 class DownloadStep(PipelineStep):
     name = StepName.DOWNLOAD
@@ -24,8 +27,8 @@ class DownloadStep(PipelineStep):
             raise StepValidationError("No URL provided")
 
     def run(self, state: PipelineState) -> PipelineState:
-        video_path = self.step_dir / "video.mp4"
-        audio_path = self.step_dir / "audio.wav"
+        video_path = self.step_dir / VIDEO_FILENAME
+        audio_path = self.step_dir / AUDIO_FILENAME
 
         # 1. Fetch metadata
         log_info("Fetching video metadata...")
@@ -71,8 +74,8 @@ class DownloadStep(PipelineStep):
 
         result = state.get_step(self.name)
         result.outputs = {
-            "video": "video.mp4",
-            "audio": "audio.wav",
+            "video": VIDEO_FILENAME,
+            "audio": AUDIO_FILENAME,
         }
 
         return state
@@ -105,7 +108,7 @@ class DownloadStep(PipelineStep):
         """Download best video+audio merged into mp4."""
         log_info("Downloading video...")
 
-        # yt-dlp выбирает лучшее видео+аудио и мёржит в mp4
+        # yt-dlp picks the best video+audio and merges into mp4
         cmd = [
             "yt-dlp",
             # Format: best video + best audio, prefer mp4 container
