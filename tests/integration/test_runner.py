@@ -57,6 +57,7 @@ def _fake_transcription_factory() -> dict[str, Any]:
     def _fake_alignment(
         vocals_path: Path,
         raw_segments: list[dict[str, Any]],
+        detected_lang: str = "en",
     ) -> list[Segment]:
         return fake_segments
 

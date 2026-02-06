@@ -149,8 +149,13 @@ class TranscribeStep(PipelineStep):
         state.source_language = detected_lang
         log_info(f"Detected source language: {detected_lang}")
 
+        # Free ASR model before loading aligner (saves ~8 GB on constrained systems)
+        asr_model = self.settings.transcription_asr_model
+        if self.model_manager is not None and asr_model in self.model_manager.loaded_names:
+            self.model_manager.unload(asr_model)
+
         # Step 2: word-level alignment
-        segments = self._run_alignment(vocals_path, raw_segments)
+        segments = self._run_alignment(vocals_path, raw_segments, detected_lang)
         log_info(f"Alignment complete: {sum(len(s.words) for s in segments)} words")
 
         # Step 3: extract speakers
@@ -245,6 +250,7 @@ class TranscribeStep(PipelineStep):
         self,
         vocals_path: Path,
         raw_segments: list[dict[str, Any]],
+        detected_lang: str = "en",
     ) -> list[Segment]:
         """Run Qwen3-ForcedAligner for word-level timestamps."""
         aligner_name = self.settings.transcription_aligner_model
@@ -259,8 +265,7 @@ class TranscribeStep(PipelineStep):
         else:
             aligner = self._load_stt(aligner_name)
 
-        # Determine language for aligner
-        lang_full = _ALIGNER_LANGUAGE_MAP.get(self._detect_language(raw_segments), "English")
+        lang_full = _ALIGNER_LANGUAGE_MAP.get(detected_lang, "English")
 
         segments: list[Segment] = []
 

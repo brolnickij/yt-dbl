@@ -51,7 +51,7 @@ def _state_path(settings: Settings, video_id: str) -> Path:
 def save_state(state: PipelineState, settings: Settings) -> Path:
     """Persist pipeline state to disk."""
     path = _state_path(settings, state.video_id)
-    path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
+    path.write_text(state.model_dump_json(), encoding="utf-8")
     return path
 
 

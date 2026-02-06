@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 def _clear_detection_cache() -> None:
     _detect_ffmpeg.cache_clear()
     _detect_ffprobe.cache_clear()
+    has_rubberband.cache_clear()
 
 
 class TestFfmpegDetection:

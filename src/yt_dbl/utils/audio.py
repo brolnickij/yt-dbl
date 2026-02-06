@@ -38,6 +38,7 @@ def _detect_ffprobe() -> str:
     return "ffprobe"
 
 
+@lru_cache(maxsize=1)
 def has_rubberband() -> bool:
     """Check whether the active ffmpeg was compiled with librubberband."""
     try:

@@ -266,6 +266,9 @@ class SynthesizeStep(PipelineStep):
         # Step 3: speed adjustment + normalisation
         self._postprocess_segments(state)
 
+        # Step 4: clean up intermediate WAVs (raw_*, sped_*)
+        self._cleanup_intermediates(state)
+
         # Persist metadata
         self._save_meta(state, meta_path)
 
@@ -320,6 +323,9 @@ class SynthesizeStep(PipelineStep):
         lang = _TTS_LANG_MAP.get(state.target_language, "auto")
         total = len(state.segments)
 
+        # Pre-compute ref text map to avoid O(N²) scans
+        ref_text_map = {s.id: _find_ref_text_for_speaker(state.segments, s) for s in state.speakers}
+
         progress = create_progress()
         try:
             with progress:
@@ -333,8 +339,7 @@ class SynthesizeStep(PipelineStep):
 
                     text = seg.translated_text or seg.text
                     ref_path = refs.get(seg.speaker)
-                    spk = self._speaker_by_id(state, seg.speaker)
-                    ref_text = _find_ref_text_for_speaker(state.segments, spk)
+                    ref_text = ref_text_map.get(seg.speaker, "")
 
                     audio = self._run_tts(model, text, ref_path, ref_text, lang)
                     self._save_wav(audio, raw_path, self.settings.tts_sample_rate)
@@ -415,6 +420,17 @@ class SynthesizeStep(PipelineStep):
 
         _normalize_loudness(raw_path, final_path)
         return final_path.name, None
+
+    def _cleanup_intermediates(self, state: PipelineState) -> None:
+        """Remove raw_*.wav and sped_*.wav after successful postprocessing."""
+        for seg in state.segments:
+            final = self.step_dir / f"segment_{seg.id:04d}.wav"
+            if not final.exists():
+                continue
+            for prefix in ("raw_", "sped_"):
+                tmp = self.step_dir / f"{prefix}{seg.id:04d}.wav"
+                if tmp.exists():
+                    tmp.unlink()
 
     # ── TTS model ───────────────────────────────────────────────────────────
 
