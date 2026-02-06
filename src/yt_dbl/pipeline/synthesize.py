@@ -56,8 +56,10 @@ def _extract_voice_reference(
 ) -> Path:
     """Extract a voice reference clip for a speaker from vocals.wav.
 
-    Uses ffmpeg to cut the best segment (longest continuous speech by this
-    speaker).  Clips to *target_duration* seconds max.
+    Uses ffmpeg to cut the best segment (highest-scoring continuous speech
+    by this speaker), applies a highpass filter at 80 Hz to remove rumble
+    and ``afftdn`` to reduce residual noise — both improve TTS cloning.
+    Clips to *target_duration* seconds max.
     """
     start = speaker.reference_start
     duration = min(speaker.reference_end - start, target_duration)
@@ -70,6 +72,8 @@ def _extract_voice_reference(
             str(start),
             "-t",
             str(duration),
+            "-af",
+            "highpass=f=80,afftdn=nf=-25",
             "-ac",
             "1",
             "-ar",

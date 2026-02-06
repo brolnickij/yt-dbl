@@ -168,6 +168,11 @@ class TestVoiceReference:
             assert "1.0" in args
             assert "-t" in args
             assert "4.0" in args  # min(5.0-1.0, 7.0) = 4.0
+            # Highpass + denoise filter chain
+            assert "-af" in args
+            af_idx = args.index("-af")
+            assert "highpass=f=80" in args[af_idx + 1]
+            assert "afftdn" in args[af_idx + 1]
 
     def test_find_ref_text_exact_match(self) -> None:
         segments = _make_segments()
