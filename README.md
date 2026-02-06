@@ -8,6 +8,13 @@ CLI tool for automatic YouTube video dubbing with voice cloning.
 
 All ML inference (ASR, alignment, TTS) runs locally on Apple Silicon via [MLX](https://github.com/ml-explore/mlx). Translation is done through the Claude API. The output is a video file dubbed in the target language using the original speaker's cloned voice.
 
+
+## Supported languages
+**TTS (synthesis):** Russian, English, German, French, Spanish, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Dutch, Polish, Ukrainian
+
+**ASR (recognition):** auto-detected via Unicode scripts (Latin, Cyrillic, Arabic, Devanagari, CJK, etc.)
+
+
 ## Requirements
 - **macOS** with **Apple Silicon** (M1/M2/M3/M4) — MLX only works on Metal
 - **Python** >= 3.11
@@ -15,15 +22,32 @@ All ML inference (ASR, alignment, TTS) runs locally on Apple Silicon via [MLX](h
 - **yt-dlp** — video downloading
 - **Anthropic API key** — for translation via Claude
 
+
 ## Installation
+
+```bash
+# Install globally (recommended)
+uv tool install yt-dbl
+
+# Or with pipx
+pipx install yt-dbl
+```
+
+### From source
 ```bash
 git clone git@github.com:brolnickij/yt-dbl.git && cd yt-dbl
 uv sync
+```
 
-# API key (required for the translation step)
+Set the API key (required for the translation step):
+
+```bash
 export YT_DBL_ANTHROPIC_API_KEY="sk-ant-..."
+```
 
-# Optional: ffmpeg-full for pitch-preserving speed-up (rubberband)
+Optional: install `ffmpeg-full` for pitch-preserving speed-up (rubberband):
+
+```bash
 brew install ffmpeg-full
 ```
 
@@ -31,8 +55,9 @@ brew install ffmpeg-full
 Models are downloaded automatically on first run, but you can fetch them ahead of time (~10.5 GB):
 
 ```bash
-uv run yt-dbl models download
+yt-dbl models download
 ```
+
 
 ## Configuration
 Settings are loaded in order of priority:
@@ -70,29 +95,31 @@ YT_DBL_SAMPLE_RATE=48000
 | `anthropic_api_key` | `YT_DBL_ANTHROPIC_API_KEY` | — | Anthropic API key |
 | `work_dir` | `YT_DBL_WORK_DIR` | `work` | Working directory |
 
+
 ## Quick start
 ```bash
 # Dub a video into Russian (default)
-uv run yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID"
+yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID"
 
 # Specify target language
-uv run yt-dbl dub "https://youtu.be/VIDEO_ID" -t es
+yt-dbl dub "https://youtu.be/VIDEO_ID" -t es
 
 # Start from a specific step (previous steps are skipped)
-uv run yt-dbl dub "https://youtu.be/VIDEO_ID" --from-step translate
+yt-dbl dub "https://youtu.be/VIDEO_ID" --from-step translate
 
 # Check job status
-uv run yt-dbl status VIDEO_ID
+yt-dbl status VIDEO_ID
 
 # Resume an interrupted job
-uv run yt-dbl resume VIDEO_ID
+yt-dbl resume VIDEO_ID
 ```
+
 
 ## Commands
 ### `dub` — dub a video
 
 ```bash
-uv run yt-dbl dub <URL> [options]
+yt-dbl dub <URL> [options]
 ```
 
 | Option | Description | Default |
@@ -108,31 +135,32 @@ uv run yt-dbl dub <URL> [options]
 
 ### `resume` — resume an interrupted job
 ```bash
-uv run yt-dbl resume <video_id> [--max-models N]
+yt-dbl resume <video_id> [--max-models N]
 ```
 
 The pipeline saves `state.json` after each step. If interrupted, `resume` picks up from the last incomplete step.
 
 ### `status` — check job status
 ```bash
-uv run yt-dbl status <video_id>
+yt-dbl status <video_id>
 ```
 
 Shows a table with each step's state (`pending` / `running` / `completed` / `failed`), execution time, and video metadata.
 
 ### `models list` — list ML models
 ```bash
-uv run yt-dbl models list
+yt-dbl models list
 ```
 
 Shows all models, their download status, and size on disk.
 
 ### `models download` — pre-download models
 ```bash
-uv run yt-dbl models download
+yt-dbl models download
 ```
 
 Downloads all HuggingFace models. The `audio-separator` model is downloaded automatically on first use.
+
 
 ## How it works
 ```
@@ -255,6 +283,7 @@ work/
     └── result.mp4                  ← final output (in job dir root)
 ```
 
+
 ## Models
 | Model | Size | Task | Inference |
 |---|---|---|---|
@@ -264,10 +293,6 @@ work/
 | MelBand-RoFormer (BS-RoFormer) | ~200 MB | Vocal/background separation | ONNX + CoreML |
 | Claude Sonnet 4.5 | — | Text translation | API (Anthropic) |
 
-### Supported languages
-**TTS (synthesis):** Russian, English, German, French, Spanish, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Dutch, Polish, Ukrainian
-
-**ASR (recognition):** auto-detected via Unicode scripts (Latin, Cyrillic, Arabic, Devanagari, CJK, etc.)
 
 ## Development
 ```bash
@@ -277,6 +302,7 @@ just test-e2e       # E2E tests (requires FFmpeg + network)
 just fix            # auto-fix linter
 just format         # auto-format
 ```
+
 
 ## License
 MIT
