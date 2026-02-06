@@ -54,7 +54,7 @@ class TestModelManager:
         mgr = ModelManager(max_loaded=3)
         for name in ["a", "b", "c"]:
             n = name
-            mgr.register(n, loader=lambda n=n: n)
+            mgr.register(n, loader=lambda n=n: n)  # type: ignore[misc]
             mgr.get(n)
         mgr.unload_all()
         assert mgr.loaded_names == []
