@@ -14,11 +14,7 @@ from yt_dbl.config import Settings
 from yt_dbl.pipeline.synthesize import (
     SYNTH_META_FILE,
     SynthesizeStep,
-    _deess,
-    _extract_voice_reference,
     _find_ref_text_for_speaker,
-    _normalize_loudness,
-    _speed_up_audio,
 )
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, StepStatus, Word
 
@@ -162,129 +158,27 @@ class TestSynthesizeStepValidation:
         step.validate_inputs(state)  # should not raise
 
 
-# ── Voice reference tests ───────────────────────────────────────────────────
+# ── Voice reference text tests ──────────────────────────────────────────────
 
 
-class TestVoiceReference:
-    def test_extract_calls_ffmpeg(self, tmp_path: Path) -> None:
-        speaker = Speaker(id="SPEAKER_00", reference_start=1.0, reference_end=5.0)
-        output = tmp_path / "ref.wav"
-
-        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff:
-            _extract_voice_reference(tmp_path / "vocals.wav", speaker, output, target_duration=7.0)
-            mock_ff.assert_called_once()
-            args = mock_ff.call_args[0][0]
-            assert "-ss" in args
-            assert "1.0" in args
-            assert "-t" in args
-            assert "4.0" in args  # min(5.0-1.0, 7.0) = 4.0
-            # Highpass + denoise filter chain
-            assert "-af" in args
-            af_idx = args.index("-af")
-            assert "highpass=f=80" in args[af_idx + 1]
-            assert "afftdn" in args[af_idx + 1]
-
-    def test_find_ref_text_exact_match(self) -> None:
+class TestFindRefTextForSpeaker:
+    def test_exact_match(self) -> None:
         segments = _make_segments()
         speaker = Speaker(id="SPEAKER_00", reference_start=0.0, reference_end=3.5)
         text = _find_ref_text_for_speaker(segments, speaker)
         assert text == "Hello, welcome to this video."
 
-    def test_find_ref_text_fallback(self) -> None:
+    def test_fallback(self) -> None:
         segments = _make_segments()
         speaker = Speaker(id="SPEAKER_00", reference_start=99.0, reference_end=100.0)
         text = _find_ref_text_for_speaker(segments, speaker)
         # Falls back to first segment of that speaker
         assert text == "Hello, welcome to this video."
 
-    def test_find_ref_text_unknown_speaker(self) -> None:
+    def test_unknown_speaker(self) -> None:
         segments = _make_segments()
         speaker = Speaker(id="SPEAKER_99")
         assert _find_ref_text_for_speaker(segments, speaker) == ""
-
-
-# ── Speed adjustment tests ──────────────────────────────────────────────────
-
-
-class TestSpeedAdjust:
-    def test_speed_up_rubberband(self, tmp_path: Path) -> None:
-        with (
-            patch("yt_dbl.pipeline.synthesize.has_rubberband", return_value=True),
-            patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff,
-        ):
-            _speed_up_audio(tmp_path / "in.wav", tmp_path / "out.wav", 1.3)
-            mock_ff.assert_called_once()
-            args = mock_ff.call_args[0][0]
-            assert any("rubberband" in a for a in args)
-            assert any("pitch=1.0" in a for a in args)
-
-    def test_speed_up_atempo_fallback(self, tmp_path: Path) -> None:
-        with (
-            patch("yt_dbl.pipeline.synthesize.has_rubberband", return_value=False),
-            patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff,
-        ):
-            _speed_up_audio(tmp_path / "in.wav", tmp_path / "out.wav", 1.3)
-            mock_ff.assert_called_once()
-            args = mock_ff.call_args[0][0]
-            assert any("atempo=1.3" in a for a in args)
-
-    def test_normalize_two_pass(self, tmp_path: Path) -> None:
-        """Two-pass loudnorm: pass 1 (measure, check=False) + pass 2 (apply)."""
-        import subprocess
-
-        fake_measure = subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout="",
-            stderr=(
-                "[Parsed_loudnorm_0 @ 0x123] {\n"
-                '    "input_i" : "-20.00",\n'
-                '    "input_tp" : "-3.00",\n'
-                '    "input_lra" : "5.00",\n'
-                '    "input_thresh" : "-30.00",\n'
-                '    "target_offset" : "4.00"\n'
-                "}"
-            ),
-        )
-        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg", return_value=fake_measure) as mock_ff:
-            _normalize_loudness(tmp_path / "in.wav", tmp_path / "out.wav")
-            assert mock_ff.call_count == 2
-            # Pass 1: measure
-            pass1_args = mock_ff.call_args_list[0][0][0]
-            assert any("loudnorm" in a for a in pass1_args)
-            assert "/dev/null" in pass1_args
-            # Pass 2: apply with measured values
-            pass2_args = mock_ff.call_args_list[1][0][0]
-            assert any("measured_I" in a for a in pass2_args)
-            assert any("linear=true" in a for a in pass2_args)
-
-
-# ── Persistence tests ───────────────────────────────────────────────────────
-
-
-class TestDeess:
-    def test_calls_ffmpeg_with_highshelf_and_compand(self, tmp_path: Path) -> None:
-        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff:
-            # Simulate successful output
-            (tmp_path / "out.wav").write_bytes(b"fake")
-            _deess(tmp_path / "in.wav", tmp_path / "out.wav")
-            mock_ff.assert_called_once()
-            args = mock_ff.call_args[0][0]
-            assert "-af" in args
-            af_idx = args.index("-af")
-            af = args[af_idx + 1]
-            assert "highshelf" in af
-            assert "compand" in af
-
-    def test_fallback_copies_on_failure(self, tmp_path: Path) -> None:
-        """If ffmpeg fails, input is copied to output."""
-        src = tmp_path / "in.wav"
-        src.write_bytes(b"audio data")
-        dst = tmp_path / "out.wav"
-        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg"):
-            # Mock doesn't create output file -> fallback triggers
-            _deess(src, dst)
-            assert dst.read_bytes() == b"audio data"
 
 
 # ── Persistence tests ─────────────────────────────────────────────────────────
@@ -352,7 +246,7 @@ class TestSynthesizeStepRun:
                 _fake_save_wav,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.run_ffmpeg",
+                "yt_dbl.utils.audio_processing.run_ffmpeg",
                 side_effect=_ffmpeg_touch,
             ),
             patch(
@@ -390,7 +284,7 @@ class TestSynthesizeStepRun:
                 _fake_save_wav,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.run_ffmpeg",
+                "yt_dbl.utils.audio_processing.run_ffmpeg",
                 side_effect=_ffmpeg_touch,
             ),
             patch(

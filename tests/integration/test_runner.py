@@ -133,7 +133,7 @@ def _pipeline_patches(sep_dir: Path) -> Any:
         )
     )
     stack.enter_context(
-        patch("yt_dbl.pipeline.synthesize.run_ffmpeg"),
+        patch("yt_dbl.utils.audio_processing.run_ffmpeg"),
     )
     stack.enter_context(
         patch(

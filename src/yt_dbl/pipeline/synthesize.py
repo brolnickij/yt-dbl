@@ -15,7 +15,13 @@ from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName
-from yt_dbl.utils.audio import get_audio_duration, has_rubberband, run_ffmpeg
+from yt_dbl.utils.audio import get_audio_duration
+from yt_dbl.utils.audio_processing import (
+    deess,
+    extract_voice_reference,
+    normalize_loudness,
+    speed_up_audio,
+)
 from yt_dbl.utils.logging import create_progress, log_info, suppress_library_noise
 
 if TYPE_CHECKING:
@@ -43,200 +49,6 @@ _TTS_LANG_MAP: dict[str, str] = {
     "pl": "polish",
     "uk": "ukrainian",
 }
-
-
-# ── Voice reference extraction ──────────────────────────────────────────────
-
-
-def _extract_voice_reference(
-    vocals_path: Path,
-    speaker: Speaker,
-    output_path: Path,
-    target_duration: float,
-) -> Path:
-    """Extract a voice reference clip for a speaker from vocals.wav.
-
-    Uses ffmpeg to cut the best segment (highest-scoring continuous speech
-    by this speaker), applies a highpass filter at 80 Hz to remove rumble
-    and ``afftdn`` to reduce residual noise — both improve TTS cloning.
-    Clips to *target_duration* seconds max.
-    """
-    start = speaker.reference_start
-    duration = min(speaker.reference_end - start, target_duration)
-
-    run_ffmpeg(
-        [
-            "-i",
-            str(vocals_path),
-            "-ss",
-            str(start),
-            "-t",
-            str(duration),
-            "-af",
-            "highpass=f=80,afftdn=nf=-25",
-            "-ac",
-            "1",
-            "-ar",
-            "24000",  # Qwen3-TTS internal sample rate for best cloning
-            str(output_path),
-        ]
-    )
-    return output_path
-
-
-# ── Speed adjustment via ffmpeg ─────────────────────────────────────────────
-
-
-def _speed_up_audio(
-    input_path: Path,
-    output_path: Path,
-    factor: float,
-) -> Path:
-    """Speed up audio by *factor*, preserving pitch and timbre.
-
-    Uses librubberband (pitch-preserving time-stretch) when available,
-    falls back to ffmpeg atempo filter otherwise.
-    """
-    if has_rubberband():
-        # rubberband preserves pitch: tempo=2.0 means 2x faster
-        run_ffmpeg(
-            [
-                "-i",
-                str(input_path),
-                "-filter:a",
-                f"rubberband=tempo={factor:.4f}:pitch=1.0",
-                str(output_path),
-            ]
-        )
-    else:
-        # Fallback: atempo (0.5-100.0 range per filter)
-        _max_atempo = 100.0
-        filters: list[str] = []
-        remaining = factor
-        while remaining > _max_atempo:
-            filters.append(f"atempo={_max_atempo}")
-            remaining /= _max_atempo
-        filters.append(f"atempo={remaining:.4f}")
-
-        run_ffmpeg(
-            [
-                "-i",
-                str(input_path),
-                "-filter:a",
-                ",".join(filters),
-                str(output_path),
-            ]
-        )
-    return output_path
-
-
-# ── De-essing ───────────────────────────────────────────────────────────────
-
-
-def _deess(input_path: Path, output_path: Path) -> Path:
-    """Reduce harsh sibilants (s, sh, z) that TTS tends to over-emphasise.
-
-    Applies a mild high-shelf compressor: frequencies above 4 kHz are
-    dynamically attenuated when they exceed a threshold, taming sharp
-    sibilance without dulling the entire mix.
-    """
-    run_ffmpeg(
-        [
-            "-i",
-            str(input_path),
-            "-af",
-            "highshelf=gain=-3:frequency=4500:width_type=q:width=0.7,"
-            "compand=attacks=0.005:decays=0.05:"
-            "points=-80/-80|-6/-8|0/-3:volume=0",
-            str(output_path),
-        ],
-        check=False,
-    )
-    # Fallback: if filter chain failed, copy input as-is
-    if not output_path.exists():
-        import shutil
-
-        shutil.copy2(input_path, output_path)
-    return output_path
-
-
-# ── Loudness normalisation ──────────────────────────────────────────────────
-
-
-def _normalize_loudness(input_path: Path, output_path: Path) -> Path:
-    """Two-pass loudness normalisation to -16 LUFS.
-
-    Pass 1 measures actual loudness; pass 2 applies correction with linear
-    mode for minimal artefacts.  Upsamples to 48 kHz (pipeline standard).
-    """
-    # Pass 1: measure
-    measure = run_ffmpeg(
-        [
-            "-i",
-            str(input_path),
-            "-filter:a",
-            "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
-            "-f",
-            "null",
-            "/dev/null",
-        ],
-        check=False,
-    )
-
-    # Try to parse measured values for precise second pass
-    import json as _json
-    import re
-
-    stderr = measure.stderr or ""
-    # loudnorm prints JSON at the end of stderr
-    json_match = re.search(r"\{[^}]+\}", stderr, re.DOTALL)
-    if json_match:
-        try:
-            stats = _json.loads(json_match.group())
-            measured_i = stats["input_i"]
-            measured_tp = stats["input_tp"]
-            measured_lra = stats["input_lra"]
-            measured_thresh = stats["input_thresh"]
-            target_offset = stats["target_offset"]
-
-            # Pass 2: apply with measured values (linear=true for best quality)
-            run_ffmpeg(
-                [
-                    "-i",
-                    str(input_path),
-                    "-filter:a",
-                    (
-                        f"loudnorm=I=-16:TP=-1.5:LRA=11"
-                        f":measured_I={measured_i}"
-                        f":measured_TP={measured_tp}"
-                        f":measured_LRA={measured_lra}"
-                        f":measured_thresh={measured_thresh}"
-                        f":offset={target_offset}"
-                        f":linear=true"
-                    ),
-                    "-ar",
-                    "48000",
-                    str(output_path),
-                ]
-            )
-        except (KeyError, _json.JSONDecodeError):
-            pass  # Fall through to single-pass
-        else:
-            return output_path
-
-    # Fallback: single-pass loudnorm
-    run_ffmpeg(
-        [
-            "-i",
-            str(input_path),
-            "-filter:a",
-            "loudnorm=I=-16:TP=-1.5:LRA=11",
-            "-ar",
-            "48000",
-            str(output_path),
-        ]
-    )
-    return output_path
 
 
 # ── TTS generation ──────────────────────────────────────────────────────────
@@ -332,7 +144,7 @@ class SynthesizeStep(PipelineStep):
                 refs[speaker.id] = ref_path
                 continue
 
-            _extract_voice_reference(
+            extract_voice_reference(
                 vocals_path,
                 speaker,
                 ref_path,
@@ -449,13 +261,13 @@ class SynthesizeStep(PipelineStep):
         _speed_threshold = 1.01
         if speed_factor > _speed_threshold:
             sped_path = self.step_dir / f"sped_{seg.id:04d}.wav"
-            _speed_up_audio(raw_path, sped_path, speed_factor)
-            _normalize_loudness(sped_path, deessed_path)
-            _deess(deessed_path, final_path)
+            speed_up_audio(raw_path, sped_path, speed_factor)
+            normalize_loudness(sped_path, deessed_path)
+            deess(deessed_path, final_path)
             return final_path.name, round(speed_factor, 3)
 
-        _normalize_loudness(raw_path, deessed_path)
-        _deess(deessed_path, final_path)
+        normalize_loudness(raw_path, deessed_path)
+        deess(deessed_path, final_path)
         return final_path.name, None
 
     def _cleanup_intermediates(self, state: PipelineState) -> None:
