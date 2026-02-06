@@ -2,18 +2,60 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from functools import lru_cache
+from pathlib import Path
 
 __all__ = ["extract_audio", "get_audio_duration", "replace_audio", "run_ffmpeg"]
+
+# Preferred ffmpeg-full path (brew keg-only install)
+_FFMPEG_FULL_BIN = "/opt/homebrew/opt/ffmpeg-full/bin"
+
+
+@lru_cache(maxsize=1)
+def _detect_ffmpeg() -> str:
+    """Auto-detect best ffmpeg binary, preferring ffmpeg-full for rubberband."""
+    from yt_dbl.config import settings  # noqa: PLC0415
+
+    if settings.ffmpeg_path:
+        return settings.ffmpeg_path
+
+    full = f"{_FFMPEG_FULL_BIN}/ffmpeg"
+    if shutil.which(full):
+        return full
+    return "ffmpeg"
+
+
+@lru_cache(maxsize=1)
+def _detect_ffprobe() -> str:
+    """Auto-detect ffprobe companion for the active ffmpeg."""
+    ffmpeg = _detect_ffmpeg()
+    if "/" in ffmpeg:
+        probe = str(Path(ffmpeg).parent / "ffprobe")
+        if shutil.which(probe):
+            return probe
+    return "ffprobe"
+
+
+def has_rubberband() -> bool:
+    """Check whether the active ffmpeg was compiled with librubberband."""
+    try:
+        result = subprocess.run(
+            [_detect_ffmpeg(), "-filters"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return False
+    else:
+        return "rubberband" in result.stdout
 
 
 def run_ffmpeg(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run an ffmpeg command and return the result."""
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *args]
+    cmd = [_detect_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", *args]
     return subprocess.run(cmd, capture_output=True, text=True, check=check)
 
 
@@ -50,6 +92,8 @@ def replace_audio(
         "1:a:0",
         "-c:a",
         "aac",
+        "-b:a",
+        "320k",  # High-quality AAC
     ]
     if subtitle_path:
         # Need to re-encode video when burning subtitles
@@ -66,7 +110,7 @@ def get_audio_duration(path: Path) -> float:
     """Get duration of an audio file in seconds."""
     result = subprocess.run(
         [
-            "ffprobe",
+            _detect_ffprobe(),
             "-v",
             "error",
             "-show_entries",

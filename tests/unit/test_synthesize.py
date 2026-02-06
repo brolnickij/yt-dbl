@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -184,19 +185,56 @@ class TestVoiceReference:
 
 
 class TestSpeedAdjust:
-    def test_speed_up_calls_ffmpeg(self, tmp_path: Path) -> None:
-        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff:
+    def test_speed_up_rubberband(self, tmp_path: Path) -> None:
+        with (
+            patch("yt_dbl.pipeline.synthesize.has_rubberband", return_value=True),
+            patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff,
+        ):
             _speed_up_audio(tmp_path / "in.wav", tmp_path / "out.wav", 1.3)
             mock_ff.assert_called_once()
             args = mock_ff.call_args[0][0]
-            assert "atempo=1.3000" in args[-1] or "atempo=1.3" in str(args)
+            assert any("rubberband" in a for a in args)
+            assert any("pitch=1.0" in a for a in args)
 
-    def test_normalize_calls_ffmpeg(self, tmp_path: Path) -> None:
-        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff:
-            _normalize_loudness(tmp_path / "in.wav", tmp_path / "out.wav")
+    def test_speed_up_atempo_fallback(self, tmp_path: Path) -> None:
+        with (
+            patch("yt_dbl.pipeline.synthesize.has_rubberband", return_value=False),
+            patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff,
+        ):
+            _speed_up_audio(tmp_path / "in.wav", tmp_path / "out.wav", 1.3)
             mock_ff.assert_called_once()
             args = mock_ff.call_args[0][0]
-            assert any("loudnorm" in a for a in args)
+            assert any("atempo=1.3" in a for a in args)
+
+    def test_normalize_two_pass(self, tmp_path: Path) -> None:
+        """Two-pass loudnorm: pass 1 (measure, check=False) + pass 2 (apply)."""
+        import subprocess
+
+        fake_measure = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="",
+            stderr=(
+                "[Parsed_loudnorm_0 @ 0x123] {\n"
+                '    "input_i" : "-20.00",\n'
+                '    "input_tp" : "-3.00",\n'
+                '    "input_lra" : "5.00",\n'
+                '    "input_thresh" : "-30.00",\n'
+                '    "target_offset" : "4.00"\n'
+                "}"
+            ),
+        )
+        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg", return_value=fake_measure) as mock_ff:
+            _normalize_loudness(tmp_path / "in.wav", tmp_path / "out.wav")
+            assert mock_ff.call_count == 2
+            # Pass 1: measure
+            pass1_args = mock_ff.call_args_list[0][0][0]
+            assert any("loudnorm" in a for a in pass1_args)
+            assert "/dev/null" in pass1_args
+            # Pass 2: apply with measured values
+            pass2_args = mock_ff.call_args_list[1][0][0]
+            assert any("measured_I" in a for a in pass2_args)
+            assert any("linear=true" in a for a in pass2_args)
 
 
 # ── Persistence tests ───────────────────────────────────────────────────────
@@ -257,7 +295,15 @@ class TestSynthesizeStepRun:
                 "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
                 return_value=mock_model,
             ),
-            patch("yt_dbl.pipeline.synthesize.run_ffmpeg"),
+            patch(
+                "yt_dbl.pipeline.synthesize.run_ffmpeg",
+                return_value=subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                ),
+            ),
             patch(
                 "yt_dbl.pipeline.synthesize.get_audio_duration",
                 return_value=1.0,  # shorter than original → no speedup
@@ -286,7 +332,15 @@ class TestSynthesizeStepRun:
                 "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
                 return_value=mock_model,
             ),
-            patch("yt_dbl.pipeline.synthesize.run_ffmpeg"),
+            patch(
+                "yt_dbl.pipeline.synthesize.run_ffmpeg",
+                return_value=subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                ),
+            ),
             patch(
                 "yt_dbl.pipeline.synthesize.get_audio_duration",
                 return_value=10.0,  # longer than original → speedup needed

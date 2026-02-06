@@ -8,15 +8,87 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from yt_dbl.utils.audio import extract_audio, get_audio_duration, replace_audio, run_ffmpeg
+from yt_dbl.utils.audio import (
+    _detect_ffmpeg,
+    _detect_ffprobe,
+    extract_audio,
+    get_audio_duration,
+    has_rubberband,
+    replace_audio,
+    run_ffmpeg,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-class TestRunFfmpeg:
+# Reset lru_cache between tests to avoid stale state
+@pytest.fixture(autouse=True)
+def _clear_detection_cache() -> None:
+    _detect_ffmpeg.cache_clear()
+    _detect_ffprobe.cache_clear()
+
+
+class TestFfmpegDetection:
+    @patch("yt_dbl.config.settings")
+    @patch("shutil.which", return_value="/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg")
+    def test_prefers_ffmpeg_full(self, mock_which: MagicMock, mock_settings: MagicMock) -> None:
+        mock_settings.ffmpeg_path = ""
+        result = _detect_ffmpeg()
+        assert "ffmpeg-full" in result
+
+    @patch("yt_dbl.config.settings")
+    def test_uses_explicit_path(self, mock_settings: MagicMock) -> None:
+        mock_settings.ffmpeg_path = "/custom/ffmpeg"
+        result = _detect_ffmpeg()
+        assert result == "/custom/ffmpeg"
+
+    @patch("yt_dbl.config.settings")
+    @patch("shutil.which", return_value=None)
+    def test_falls_back_to_ffmpeg(self, mock_which: MagicMock, mock_settings: MagicMock) -> None:
+        mock_settings.ffmpeg_path = ""
+        result = _detect_ffmpeg()
+        assert result == "ffmpeg"
+
+    @patch(
+        "yt_dbl.utils.audio._detect_ffmpeg",
+        return_value="/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
+    )
+    @patch("shutil.which", return_value="/opt/homebrew/opt/ffmpeg-full/bin/ffprobe")
+    def test_ffprobe_companion(self, mock_which: MagicMock, mock_detect: MagicMock) -> None:
+        _detect_ffprobe.cache_clear()
+        result = _detect_ffprobe()
+        assert "ffprobe" in result
+        assert "ffmpeg-full" in result
+
+
+class TestHasRubberband:
+    @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
     @patch("subprocess.run")
-    def test_basic_args(self, mock_run: MagicMock) -> None:
+    def test_returns_true(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="rubberband  A->A  Apply time-stretching"
+        )
+        assert has_rubberband() is True
+
+    @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
+    @patch("subprocess.run")
+    def test_returns_false(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="atempo  A->A  Adjust audio tempo"
+        )
+        assert has_rubberband() is False
+
+    @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_returns_false_on_missing(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
+        assert has_rubberband() is False
+
+
+class TestRunFfmpeg:
+    @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
+    @patch("subprocess.run")
+    def test_basic_args(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
         run_ffmpeg(["-i", "in.mp4", "out.wav"])
         mock_run.assert_called_once_with(
@@ -26,15 +98,17 @@ class TestRunFfmpeg:
             check=True,
         )
 
+    @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
     @patch("subprocess.run")
-    def test_check_false(self, mock_run: MagicMock) -> None:
+    def test_check_false(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=1)
         run_ffmpeg(["-i", "bad.mp4"], check=False)
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["check"] is False
 
+    @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
     @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "ffmpeg"))
-    def test_raises_on_error(self, mock_run: MagicMock) -> None:
+    def test_raises_on_error(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
         with pytest.raises(subprocess.CalledProcessError):
             run_ffmpeg(["-i", "bad.mp4", "out.wav"])
 
@@ -82,6 +156,8 @@ class TestReplaceAudio:
         assert "copy" in args
         assert "-c:a" in args
         assert "aac" in args
+        assert "-b:a" in args
+        assert "320k" in args
         # No -vf subtitles=... flag
         assert "-vf" not in args
 
@@ -99,15 +175,21 @@ class TestReplaceAudio:
 
 
 class TestGetAudioDuration:
+    @patch("yt_dbl.utils.audio._detect_ffprobe", return_value="ffprobe")
     @patch("subprocess.run")
-    def test_parses_duration(self, mock_run: MagicMock, tmp_path: Path) -> None:
+    def test_parses_duration(
+        self, mock_run: MagicMock, mock_probe: MagicMock, tmp_path: Path
+    ) -> None:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="125.340000\n", stderr=""
         )
         duration = get_audio_duration(tmp_path / "audio.wav")
         assert duration == pytest.approx(125.34)
 
+    @patch("yt_dbl.utils.audio._detect_ffprobe", return_value="ffprobe")
     @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "ffprobe"))
-    def test_raises_on_error(self, mock_run: MagicMock, tmp_path: Path) -> None:
+    def test_raises_on_error(
+        self, mock_run: MagicMock, mock_probe: MagicMock, tmp_path: Path
+    ) -> None:
         with pytest.raises(subprocess.CalledProcessError):
             get_audio_duration(tmp_path / "missing.wav")

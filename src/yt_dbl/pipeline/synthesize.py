@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName
-from yt_dbl.utils.audio import get_audio_duration, run_ffmpeg
+from yt_dbl.utils.audio import get_audio_duration, has_rubberband, run_ffmpeg
 from yt_dbl.utils.logging import create_progress, log_info, suppress_library_noise
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ def _extract_voice_reference(
             "-ac",
             "1",
             "-ar",
-            "16000",  # Qwen3-TTS expects 16kHz reference
+            "24000",  # Qwen3-TTS internal sample rate for best cloning
             str(output_path),
         ]
     )
@@ -86,28 +86,41 @@ def _speed_up_audio(
     output_path: Path,
     factor: float,
 ) -> Path:
-    """Speed up audio by *factor* using ffmpeg atempo filter.
+    """Speed up audio by *factor*, preserving pitch and timbre.
 
-    atempo only accepts [0.5, 100.0], so we chain filters for extreme values.
+    Uses librubberband (pitch-preserving time-stretch) when available,
+    falls back to ffmpeg atempo filter otherwise.
     """
-    _max_atempo = 100.0
-    # Build atempo filter chain (each filter handles 0.5-100.0 range)
-    filters: list[str] = []
-    remaining = factor
-    while remaining > _max_atempo:
-        filters.append(f"atempo={_max_atempo}")
-        remaining /= _max_atempo
-    filters.append(f"atempo={remaining:.4f}")
+    if has_rubberband():
+        # rubberband preserves pitch: tempo=2.0 means 2x faster
+        run_ffmpeg(
+            [
+                "-i",
+                str(input_path),
+                "-filter:a",
+                f"rubberband=tempo={factor:.4f}:pitch=1.0",
+                str(output_path),
+            ]
+        )
+    else:
+        # Fallback: atempo (0.5-100.0 range per filter)
+        _max_atempo = 100.0
+        filters: list[str] = []
+        remaining = factor
+        while remaining > _max_atempo:
+            filters.append(f"atempo={_max_atempo}")
+            remaining /= _max_atempo
+        filters.append(f"atempo={remaining:.4f}")
 
-    run_ffmpeg(
-        [
-            "-i",
-            str(input_path),
-            "-filter:a",
-            ",".join(filters),
-            str(output_path),
-        ]
-    )
+        run_ffmpeg(
+            [
+                "-i",
+                str(input_path),
+                "-filter:a",
+                ",".join(filters),
+                str(output_path),
+            ]
+        )
     return output_path
 
 
@@ -115,7 +128,67 @@ def _speed_up_audio(
 
 
 def _normalize_loudness(input_path: Path, output_path: Path) -> Path:
-    """Normalize audio loudness to -16 LUFS using ffmpeg loudnorm."""
+    """Two-pass loudness normalisation to -16 LUFS.
+
+    Pass 1 measures actual loudness; pass 2 applies correction with linear
+    mode for minimal artefacts.  Upsamples to 48 kHz (pipeline standard).
+    """
+    # Pass 1: measure
+    measure = run_ffmpeg(
+        [
+            "-i",
+            str(input_path),
+            "-filter:a",
+            "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+            "-f",
+            "null",
+            "/dev/null",
+        ],
+        check=False,
+    )
+
+    # Try to parse measured values for precise second pass
+    import json as _json
+    import re
+
+    stderr = measure.stderr or ""
+    # loudnorm prints JSON at the end of stderr
+    json_match = re.search(r"\{[^}]+\}", stderr, re.DOTALL)
+    if json_match:
+        try:
+            stats = _json.loads(json_match.group())
+            measured_i = stats["input_i"]
+            measured_tp = stats["input_tp"]
+            measured_lra = stats["input_lra"]
+            measured_thresh = stats["input_thresh"]
+            target_offset = stats["target_offset"]
+
+            # Pass 2: apply with measured values (linear=true for best quality)
+            run_ffmpeg(
+                [
+                    "-i",
+                    str(input_path),
+                    "-filter:a",
+                    (
+                        f"loudnorm=I=-16:TP=-1.5:LRA=11"
+                        f":measured_I={measured_i}"
+                        f":measured_TP={measured_tp}"
+                        f":measured_LRA={measured_lra}"
+                        f":measured_thresh={measured_thresh}"
+                        f":offset={target_offset}"
+                        f":linear=true"
+                    ),
+                    "-ar",
+                    "48000",
+                    str(output_path),
+                ]
+            )
+        except (KeyError, _json.JSONDecodeError):
+            pass  # Fall through to single-pass
+        else:
+            return output_path
+
+    # Fallback: single-pass loudnorm
     run_ffmpeg(
         [
             "-i",
@@ -123,7 +196,7 @@ def _normalize_loudness(input_path: Path, output_path: Path) -> Path:
             "-filter:a",
             "loudnorm=I=-16:TP=-1.5:LRA=11",
             "-ar",
-            "48000",  # Upsample to pipeline sample rate
+            "48000",
             str(output_path),
         ]
     )

@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     model_cache_dir: Path = Field(
         default_factory=lambda: Path.home() / ".cache" / "yt-dbl" / "models",
     )
+    ffmpeg_path: str = ""  # auto-detect: prefers ffmpeg-full if available
 
     # ── Synthesis (TTS) ──────────────────────────────────────────────────────
     tts_model: str = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
