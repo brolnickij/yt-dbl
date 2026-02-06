@@ -2,12 +2,58 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 __all__ = ["Settings", "settings"]
+
+
+# RAM thresholds for auto-detecting max_loaded_models
+_RAM_TIER_HIGH_GB = 32  # 32+ GB -> 3 models
+_RAM_TIER_MID_GB = 17  # 17-31 GB -> 2 models
+
+
+def _detect_max_models() -> int:
+    """Auto-detect max_loaded_models based on system RAM.
+
+    Heuristic:
+      - 16 GB or less: 1 (sequential model loading)
+      - 17-31 GB:      2
+      - 32 GB+:        3
+    """
+    try:
+        total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+        total_gb = total / (1024**3)
+    except (ValueError, OSError, AttributeError):
+        # Fallback for macOS where sysconf may not work for PHYS_PAGES
+        total_gb = _macos_ram_gb()
+        if total_gb == 0:
+            return 1
+
+    if total_gb >= _RAM_TIER_HIGH_GB:
+        return 3
+    if total_gb >= _RAM_TIER_MID_GB:
+        return 2
+    return 1
+
+
+def _macos_ram_gb() -> float:
+    """Read total RAM on macOS via sysctl, return 0 on failure."""
+    import subprocess  # noqa: PLC0415
+
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return int(result.stdout.strip()) / (1024**3)
+    except Exception:
+        return 0.0
 
 
 class Settings(BaseSettings):
@@ -55,7 +101,14 @@ class Settings(BaseSettings):
     transcription_temperature: float = Field(default=0.0, ge=0.0, le=1.0)
 
     # ── Models ──────────────────────────────────────────────────────────────
-    max_loaded_models: int = Field(default=1, ge=1)
+    max_loaded_models: int = Field(default=0, ge=0)  # 0 = auto-detect
+
+    @model_validator(mode="after")
+    def _auto_detect_max_models(self) -> Settings:
+        """Replace 0 (auto) with a value based on system RAM."""
+        if self.max_loaded_models == 0:
+            object.__setattr__(self, "max_loaded_models", _detect_max_models())
+        return self
 
     # ── Paths ───────────────────────────────────────────────────────────────
     work_dir: Path = Path("work")
