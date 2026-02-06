@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v1.4.0 (2026-02-06)
+
+### Bug Fixes
+
+- **translate**: Bump default max_tokens to 32768 for Sonnet 4.5
+  ([`deba054`](https://github.com/brolnickij/yt-dbl/commit/deba054781853e7196c70c6f06f46e19fef197ac))
+
+### Features
+
+- **translate**: Add auto-batching for long audio translation
+  ([`cc78e15`](https://github.com/brolnickij/yt-dbl/commit/cc78e15f3948577ce0a6e397961c3dd7ae75edb3))
+
+### Testing
+
+- Fix translation step mock and GPU memory cleanup tests
+  ([`8a83e66`](https://github.com/brolnickij/yt-dbl/commit/8a83e665a6b08212a6dadbb0e1d2ed15bf5891dd))
+
+
 ## v1.3.0 (2026-02-06)
 
 ### Documentation
