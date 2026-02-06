@@ -139,7 +139,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _auto_detect_from_ram(self) -> Settings:
-        """Replace 0 (auto) fields with values based on system RAM."""
+        """Replace 0 (auto) fields with values based on system RAM.
+
+        Uses ``object.__setattr__`` because pydantic-settings models are
+        effectively frozen after ``__init__``: the normal attribute setter
+        would trigger validation again, causing infinite recursion.
+        This is the `recommended pattern for mutating fields inside
+        model validators <https://docs.pydantic.dev/latest/concepts/validators/#model-validators>`_.
+        """
         if self.max_loaded_models == 0:
             object.__setattr__(self, "max_loaded_models", _detect_max_models())
         if self.separation_batch_size == 0:
