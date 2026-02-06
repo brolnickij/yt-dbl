@@ -69,6 +69,7 @@ def _fake_transcription_factory() -> dict[str, Any]:
 def _fake_translation(
     segments: list[Segment],
     target_language: str,
+    source_language: str = "auto-detected",
 ) -> dict[int, str]:
     """Fake translate that returns deterministic translations."""
     return {seg.id: f"[{target_language}] {seg.text}" for seg in segments}
@@ -122,6 +123,12 @@ def _pipeline_patches(sep_dir: Path) -> Any:
         patch(
             "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
             return_value=_fake_tts_model(),
+        )
+    )
+    stack.enter_context(
+        patch(
+            "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+            return_value=__import__("numpy").zeros(12000, dtype=__import__("numpy").float32),
         )
     )
     stack.enter_context(
