@@ -63,6 +63,11 @@ class Settings(BaseSettings):
         default_factory=lambda: Path.home() / ".cache" / "yt-dbl" / "models",
     )
 
+    # ── Synthesis (TTS) ──────────────────────────────────────────────────────
+    tts_model: str = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
+    tts_temperature: float = Field(default=0.9, ge=0.0, le=2.0)
+    tts_sample_rate: int = 12000  # Qwen3-TTS native output rate
+
     # ── Translation ─────────────────────────────────────────────────────────
     claude_model: str = "claude-opus-4-6"
 

@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from tests.conftest import prefill_download
 from yt_dbl.config import Settings
@@ -74,8 +74,20 @@ def _fake_translation(
     return {seg.id: f"[{target_language}] {seg.text}" for seg in segments}
 
 
+def _fake_tts_model() -> Any:
+    """Return a fake TTS model whose generate() returns dummy audio."""
+    import numpy as np
+
+    model = MagicMock()
+    result = MagicMock()
+    result.audio = np.zeros(12000, dtype=np.float32)
+    result.sample_rate = 12000
+    model.generate.return_value = [result]
+    return model
+
+
 def _pipeline_patches(sep_dir: Path) -> Any:
-    """Context manager stack for all pipeline mocks (separate+transcribe+translate)."""
+    """Context manager stack for all pipeline mocks (separate+transcribe+translate+synthesize)."""
     from contextlib import ExitStack
 
     fakes = _fake_transcription_factory()
@@ -104,6 +116,25 @@ def _pipeline_patches(sep_dir: Path) -> Any:
             "yt_dbl.pipeline.translate.TranslateStep._translate",
             side_effect=_fake_translation,
         )
+    )
+    # Synthesize mocks: skip real TTS + ffmpeg
+    stack.enter_context(
+        patch(
+            "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
+            return_value=_fake_tts_model(),
+        )
+    )
+    stack.enter_context(
+        patch("yt_dbl.pipeline.synthesize.run_ffmpeg"),
+    )
+    stack.enter_context(
+        patch(
+            "yt_dbl.pipeline.synthesize.get_audio_duration",
+            return_value=1.0,
+        ),
+    )
+    stack.enter_context(
+        patch("yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav"),
     )
     return stack
 

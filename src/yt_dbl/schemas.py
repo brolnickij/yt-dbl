@@ -92,6 +92,10 @@ class Segment(BaseModel):
     # Translation fields (filled after translate step)
     translated_text: str = ""
 
+    # Synthesis fields (filled after synthesize step)
+    synth_path: str = ""  # relative path to synthesized WAV
+    synth_speed_factor: float = 1.0  # applied speed adjustment
+
     @property
     def duration(self) -> float:
         return self.end - self.start

@@ -143,6 +143,41 @@ def prefill_translate(state: PipelineState, cfg: Settings) -> PipelineState:
     return state
 
 
+def prefill_synthesize(state: PipelineState, cfg: Settings) -> PipelineState:
+    """Utility: populate synthesize step so assemble+ steps can run.
+
+    Call after prefill_translate when tests need post-synthesis state.
+    """
+    import json as _json
+
+    for seg in state.segments:
+        seg.synth_path = f"segment_{seg.id:04d}.wav"
+        seg.synth_speed_factor = 1.0
+
+    step = state.get_step(StepName.SYNTHESIZE)
+    step.status = StepStatus.COMPLETED
+    step.outputs = {f"seg_{seg.id}": seg.synth_path for seg in state.segments}
+    step.outputs["meta"] = "synth_meta.json"
+
+    step_dir = cfg.step_dir(state.video_id, "05_synthesize")
+    for seg in state.segments:
+        (step_dir / seg.synth_path).write_bytes(b"fake-synth")
+
+    meta = {
+        "segments": [
+            {
+                "id": seg.id,
+                "synth_path": seg.synth_path,
+                "synth_speed_factor": seg.synth_speed_factor,
+            }
+            for seg in state.segments
+        ],
+        "speakers": [{"id": s.id, "reference_path": s.reference_path} for s in state.speakers],
+    }
+    (step_dir / "synth_meta.json").write_text(_json.dumps(meta, indent=2), encoding="utf-8")
+    return state
+
+
 def prefill_transcribe(state: PipelineState, cfg: Settings) -> PipelineState:
     """Utility: populate transcribe step so translate+ steps can run.
 

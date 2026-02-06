@@ -16,6 +16,8 @@ repos:
           - typer>=0.21.1
           - rich>=14.3.2
           - anthropic>=0.78
+          - numpy>=2.3
+          - soundfile>=0.13
         args: [--config-file=mypy.ini]
         pass_filenames: false
 
