@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import subprocess
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +14,7 @@ from yt_dbl.config import Settings
 from yt_dbl.pipeline.synthesize import (
     SYNTH_META_FILE,
     SynthesizeStep,
+    _deess,
     _extract_voice_reference,
     _find_ref_text_for_speaker,
     _normalize_loudness,
@@ -20,11 +22,19 @@ from yt_dbl.pipeline.synthesize import (
 )
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, StepStatus, Word
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-
 # ── Helpers ─────────────────────────────────────────────────────────────────
+
+
+def _ffmpeg_touch(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+    """Mock run_ffmpeg that creates the output file so downstream steps find it."""
+    cmd_args: list[str] = args[0] if args else kwargs.get("args", [])
+    # Last positional arg is the output path (unless it's /dev/null)
+    if cmd_args:
+        candidate = cmd_args[-1]
+        if candidate != "/dev/null" and not candidate.startswith("-"):
+            Path(candidate).parent.mkdir(parents=True, exist_ok=True)
+            Path(candidate).write_bytes(b"fake-audio")
+    return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
 
 def _make_segments() -> list[Segment]:
@@ -252,6 +262,34 @@ class TestSpeedAdjust:
 # ── Persistence tests ───────────────────────────────────────────────────────
 
 
+class TestDeess:
+    def test_calls_ffmpeg_with_highshelf_and_compand(self, tmp_path: Path) -> None:
+        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg") as mock_ff:
+            # Simulate successful output
+            (tmp_path / "out.wav").write_bytes(b"fake")
+            _deess(tmp_path / "in.wav", tmp_path / "out.wav")
+            mock_ff.assert_called_once()
+            args = mock_ff.call_args[0][0]
+            assert "-af" in args
+            af_idx = args.index("-af")
+            af = args[af_idx + 1]
+            assert "highshelf" in af
+            assert "compand" in af
+
+    def test_fallback_copies_on_failure(self, tmp_path: Path) -> None:
+        """If ffmpeg fails, input is copied to output."""
+        src = tmp_path / "in.wav"
+        src.write_bytes(b"audio data")
+        dst = tmp_path / "out.wav"
+        with patch("yt_dbl.pipeline.synthesize.run_ffmpeg"):
+            # Mock doesn't create output file -> fallback triggers
+            _deess(src, dst)
+            assert dst.read_bytes() == b"audio data"
+
+
+# ── Persistence tests ─────────────────────────────────────────────────────────
+
+
 class TestPersistence:
     def test_save_and_load_meta(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
@@ -315,12 +353,7 @@ class TestSynthesizeStepRun:
             ),
             patch(
                 "yt_dbl.pipeline.synthesize.run_ffmpeg",
-                return_value=subprocess.CompletedProcess(
-                    args=[],
-                    returncode=0,
-                    stdout="",
-                    stderr="",
-                ),
+                side_effect=_ffmpeg_touch,
             ),
             patch(
                 "yt_dbl.pipeline.synthesize.get_audio_duration",
@@ -358,12 +391,7 @@ class TestSynthesizeStepRun:
             ),
             patch(
                 "yt_dbl.pipeline.synthesize.run_ffmpeg",
-                return_value=subprocess.CompletedProcess(
-                    args=[],
-                    returncode=0,
-                    stdout="",
-                    stderr="",
-                ),
+                side_effect=_ffmpeg_touch,
             ),
             patch(
                 "yt_dbl.pipeline.synthesize.get_audio_duration",
