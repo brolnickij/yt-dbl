@@ -144,7 +144,7 @@ class TranscribeStep(PipelineStep):
 
         state.segments = segments
         state.speakers = speakers
-        self._save(segments_path, segments, speakers)
+        self._save(segments_path, segments, speakers, source_language=detected_lang)
 
         result = state.get_step(self.name)
         result.outputs = {"segments": SEGMENTS_FILE}
@@ -665,11 +665,14 @@ class TranscribeStep(PipelineStep):
         path: Path,
         segments: list[Segment],
         speakers: list[Speaker],
+        source_language: str = "",
     ) -> None:
-        data = {
+        data: dict[str, Any] = {
             "segments": [s.model_dump() for s in segments],
             "speakers": [s.model_dump() for s in speakers],
         }
+        if source_language:
+            data["source_language"] = source_language
         path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
@@ -677,6 +680,10 @@ class TranscribeStep(PipelineStep):
         data = json.loads(path.read_text(encoding="utf-8"))
         state.segments = [Segment.model_validate(s) for s in data["segments"]]
         state.speakers = [Speaker.model_validate(s) for s in data["speakers"]]
+
+        # Restore detected language when available (added in later versions)
+        if source_lang := data.get("source_language"):
+            state.source_language = source_lang
 
         result = state.get_step(StepName.TRANSCRIBE)
         result.outputs = {"segments": SEGMENTS_FILE}

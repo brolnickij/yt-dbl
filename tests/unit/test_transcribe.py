@@ -485,6 +485,46 @@ class TestPersistence:
         assert loaded_state.segments[0].text == "Cached"
         assert len(loaded_state.speakers) == 1
 
+    def test_save_includes_source_language(self, tmp_path: Path) -> None:
+        """source_language is stored in segments.json."""
+        segments = [Segment(id=0, text="Привет", start=0.0, end=1.0, speaker="SPEAKER_00")]
+        speakers = [Speaker(id="SPEAKER_00", total_duration=1.0)]
+
+        path = tmp_path / SEGMENTS_FILE
+        TranscribeStep._save(path, segments, speakers, source_language="ru")
+
+        data = json.loads(path.read_text())
+        assert data["source_language"] == "ru"
+
+    def test_load_cached_restores_source_language(self, tmp_path: Path) -> None:
+        """_load_cached restores source_language from segments.json."""
+        step, _cfg, state = _make_step(tmp_path)
+        segments = [Segment(id=0, text="Hola", start=0.0, end=1.0, speaker="SPEAKER_00")]
+        speakers = [Speaker(id="SPEAKER_00", total_duration=1.0)]
+
+        path = step.step_dir / SEGMENTS_FILE
+        TranscribeStep._save(path, segments, speakers, source_language="es")
+
+        loaded = TranscribeStep._load_cached(state, path)
+        assert loaded.source_language == "es"
+
+    def test_load_cached_handles_legacy_file(self, tmp_path: Path) -> None:
+        """Old segments.json without source_language doesn't crash."""
+        step, _cfg, state = _make_step(tmp_path)
+        segments = [Segment(id=0, text="Hi", start=0.0, end=1.0, speaker="SPEAKER_00")]
+        speakers = [Speaker(id="SPEAKER_00", total_duration=1.0)]
+
+        path = step.step_dir / SEGMENTS_FILE
+        # Write without source_language (legacy format)
+        data = {
+            "segments": [s.model_dump() for s in segments],
+            "speakers": [s.model_dump() for s in speakers],
+        }
+        path.write_text(json.dumps(data))
+
+        loaded = TranscribeStep._load_cached(state, path)
+        assert loaded.source_language == ""  # remains default
+
 
 # ── Full run (mocked models) ───────────────────────────────────────────────
 
