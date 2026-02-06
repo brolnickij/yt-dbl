@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,22 @@ from yt_dbl.schemas import (
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
+
+
+# ── Environment isolation ───────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _no_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prevent .env and shell env vars from leaking into Settings.
+
+    - CWD is changed to a clean tmpdir so pydantic-settings finds no .env file.
+    - All YT_DBL_* environment variables are removed for full isolation.
+    """
+    monkeypatch.chdir(tmp_path)
+    for key in list(os.environ):
+        if key.startswith("YT_DBL_"):
+            monkeypatch.delenv(key)
 
 
 # ── CLI hooks ───────────────────────────────────────────────────────────────

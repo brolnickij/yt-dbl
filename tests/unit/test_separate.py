@@ -218,9 +218,8 @@ class TestSeparationConfig:
         cfg = Settings()
         assert "roformer" in cfg.separation_model.lower()
 
-    def test_default_segment_size(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("YT_DBL_SEPARATION_SEGMENT_SIZE", raising=False)
-        cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+    def test_default_segment_size(self) -> None:
+        cfg = Settings()
         assert cfg.separation_segment_size == 256
 
     def test_default_overlap(self) -> None:

@@ -583,15 +583,15 @@ class TestGetTotalDuration:
 
 class TestAssembleConfig:
     def test_default_subtitle_mode(self) -> None:
-        cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = Settings()
         assert cfg.subtitle_mode == "softsub"
 
     def test_subtitle_mode_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("YT_DBL_SUBTITLE_MODE", "hardsub")
-        cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = Settings()
         assert cfg.subtitle_mode == "hardsub"
 
     def test_subtitle_mode_none_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("YT_DBL_SUBTITLE_MODE", "none")
-        cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = Settings()
         assert cfg.subtitle_mode == "none"

@@ -337,7 +337,7 @@ class TestSynthesizeStepRun:
 
 class TestSynthesisConfig:
     def test_default_tts_model(self) -> None:
-        cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = Settings()
         assert cfg.tts_model == "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
         assert cfg.tts_sample_rate == 24000
         assert cfg.tts_temperature == 0.9
@@ -347,7 +347,7 @@ class TestSynthesisConfig:
 
     def test_custom_model_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("YT_DBL_TTS_MODEL", "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16")
-        cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = Settings()
         assert cfg.tts_model == "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16"
 
 
