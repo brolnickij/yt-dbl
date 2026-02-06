@@ -377,12 +377,20 @@ class TranscribeStep(PipelineStep):
     ) -> tuple[dict[int, int], int]:
         """Map current-chunk speaker IDs to match the previous chunk.
 
-        Uses temporal overlap of segments in the shared zone for greedy
-        bipartite matching.  Unmatched speakers get fresh global IDs.
+        Builds a temporal-overlap matrix for speaker pairs in the shared
+        zone and solves optimal bipartite assignment via the Hungarian
+        algorithm (``scipy.optimize.linear_sum_assignment``).  This
+        guarantees the globally optimal mapping (maximum total overlap),
+        unlike the previous greedy approach which could be suboptimal when
+        a speaker has comparable overlap with multiple candidates.
+
+        Unmatched speakers get fresh global IDs.
 
         Returns ``(mapping, new_global_max)`` where *mapping* is
         ``{curr_local_id: global_id}``.
         """
+        from scipy.optimize import linear_sum_assignment
+
         prev_in_zone = [
             s for s in prev_segments if s["end"] > overlap_start and s["start"] < overlap_end
         ]
@@ -404,10 +412,11 @@ class TranscribeStep(PipelineStep):
         prev_ids = sorted({s["speaker_id"] for s in prev_in_zone})
         curr_ids = sorted({s["speaker_id"] for s in curr_in_zone})
 
-        # Compute temporal overlap for every (curr, prev) speaker pair
-        scores: list[tuple[float, int, int]] = []
+        # Build overlap matrix: rows = curr speakers, cols = prev speakers
+        overlap_matrix = []
         for cid in curr_ids:
             c_ivs = [(s["start"], s["end"]) for s in curr_in_zone if s["speaker_id"] == cid]
+            row = []
             for pid in prev_ids:
                 p_ivs = [(s["start"], s["end"]) for s in prev_in_zone if s["speaker_id"] == pid]
                 total = 0.0
@@ -416,16 +425,17 @@ class TranscribeStep(PipelineStep):
                         ov = min(ce, pe) - max(cs, ps)
                         if ov > 0:
                             total += ov
-                scores.append((total, cid, pid))
+                row.append(total)
+            overlap_matrix.append(row)
 
-        # Greedy matching by descending overlap
-        scores.sort(reverse=True)
+        # Hungarian algorithm (minimises cost, so negate overlap to maximise)
+        cost = [[-v for v in row] for row in overlap_matrix]
+        row_idx, col_idx = linear_sum_assignment(cost)
+
         mapping = {}
-        used_prev: set[int] = set()
-        for score, cid, pid in scores:
-            if cid not in mapping and pid not in used_prev and score > 0:
-                mapping[cid] = pid
-                used_prev.add(pid)
+        for ri, ci in zip(row_idx, col_idx, strict=True):
+            if overlap_matrix[ri][ci] > 0:
+                mapping[curr_ids[ri]] = prev_ids[ci]
 
         # Unmatched current speakers get new global IDs
         for cid in all_curr_ids:

@@ -787,6 +787,46 @@ class TestReconcileChunkSpeakers:
         assert mapping[1] == 1  # new global ID
         assert gmax == 1
 
+    def test_hungarian_optimal_over_greedy(self) -> None:
+        """Hungarian algorithm finds optimal matching where greedy would fail.
+
+        Overlap matrix (seconds):
+                     prev0   prev1
+            curr 0:   51      50
+            curr 1:   50       0
+
+        Greedy picks curr 0→prev 0 (best single=51), leaving curr 1
+        unmatched (prev 0 taken, prev 1 has zero overlap with curr 1).
+        Total matched overlap: 51, one speaker unmapped.
+
+        Hungarian picks curr 0→prev 1 (50) + curr 1→prev 0 (50) = 100,
+        mapping both speakers optimally.
+        """
+        prev = [
+            # prev speaker 0: spans entire overlap zone (3180–3300)
+            {"start": 3180.0, "end": 3300.0, "speaker_id": 0, "text": "prev-spk0"},
+            # prev speaker 1: first 50s of overlap zone (3180–3230)
+            {"start": 3180.0, "end": 3230.0, "speaker_id": 1, "text": "prev-spk1"},
+        ]
+        curr = [
+            # curr speaker 0: 3179–3231 → overlaps prev0 by 51s, prev1 by 50s
+            {"start": 3179.0, "end": 3231.0, "speaker_id": 0, "text": "curr-spk0"},
+            # curr speaker 1: 3250–3300 → overlaps prev0 by 50s, prev1 by 0s
+            {"start": 3250.0, "end": 3300.0, "speaker_id": 1, "text": "curr-spk1"},
+        ]
+        mapping, gmax = TranscribeStep._reconcile_chunk_speakers(
+            prev,
+            curr,
+            overlap_start=3180.0,
+            overlap_end=3300.0,
+            global_max_speaker=1,
+        )
+        # Hungarian optimal: curr 0→prev 1, curr 1→prev 0 (total overlap 100)
+        # Greedy would pick: curr 0→prev 0 (51), curr 1 unmatched (total 51)
+        assert mapping[0] == 1  # curr 0 → prev speaker 1
+        assert mapping[1] == 0  # curr 1 → prev speaker 0
+        assert gmax == 1  # no new speakers needed
+
 
 # ── Chunking config tests ──────────────────────────────────────────────────
 
