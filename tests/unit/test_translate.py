@@ -20,7 +20,7 @@ from yt_dbl.pipeline.translate import (
     _generate_srt,
     _parse_translations,
 )
-from yt_dbl.schemas import PipelineState, Segment, StepName, StepStatus, Word
+from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName, StepStatus, Word
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -62,7 +62,7 @@ def _make_segments() -> list[Segment]:
 
 def _make_step(tmp_path: Path) -> tuple[TranslateStep, Settings, PipelineState]:
     cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test-key")
-    step_dir = cfg.step_dir("test123", "04_translate")
+    step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
     step = TranslateStep(settings=cfg, work_dir=step_dir)
     state = PipelineState(video_id="test123", url="https://example.com")
 
@@ -110,7 +110,7 @@ class TestTranslateStepValidation:
             anthropic_api_key="",
             _env_file=None,  # type: ignore[call-arg]
         )
-        step_dir = cfg.step_dir("test123", "04_translate")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
         step = TranslateStep(settings=cfg, work_dir=step_dir)
         state = PipelineState(video_id="test123")
         state.segments = _make_segments()

@@ -12,7 +12,7 @@ import pytest
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.base import DownloadError, StepValidationError
 from yt_dbl.pipeline.download import DownloadStep
-from yt_dbl.schemas import PipelineState, StepName
+from yt_dbl.schemas import STEP_DIRS, PipelineState, StepName
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,7 +29,7 @@ FAKE_META = {
 class TestDownloadStep:
     def _make_step(self, tmp_path: Path) -> tuple[DownloadStep, Settings, PipelineState]:
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "01_download")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         step = DownloadStep(settings=cfg, work_dir=step_dir)
         state = PipelineState(
             video_id="test123",
@@ -120,7 +120,7 @@ class TestDownloadStep:
 class TestFetchMetadata:
     def test_parses_json_output(self, tmp_path: Path) -> None:
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "01_download")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         step = DownloadStep(settings=cfg, work_dir=step_dir)
 
         mock_result = subprocess.CompletedProcess(
@@ -135,7 +135,7 @@ class TestFetchMetadata:
 
     def test_raises_on_failure(self, tmp_path: Path) -> None:
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "01_download")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         step = DownloadStep(settings=cfg, work_dir=step_dir)
 
         with (
@@ -155,7 +155,7 @@ class TestDownloadVideo:
     def test_yt_dlp_not_found(self, mock_popen: MagicMock, tmp_path: Path) -> None:
         mock_popen.side_effect = FileNotFoundError()
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "01_download")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         step = DownloadStep(settings=cfg, work_dir=step_dir)
 
         with pytest.raises(DownloadError, match="yt-dlp not found"):
@@ -169,7 +169,7 @@ class TestDownloadVideo:
         mock_popen.return_value = proc
 
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "01_download")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         step = DownloadStep(settings=cfg, work_dir=step_dir)
 
         with pytest.raises(DownloadError, match="exited with code 1"):
@@ -190,7 +190,7 @@ class TestDownloadStepOutputVerification:
         tmp_path: Path,
     ) -> None:
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "01_download")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         step = DownloadStep(settings=cfg, work_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://youtube.com/watch?v=test123")
 

@@ -13,7 +13,7 @@ import pytest
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.download import DownloadStep
 from yt_dbl.pipeline.separate import SeparateStep
-from yt_dbl.schemas import PipelineState, StepName, StepStatus
+from yt_dbl.schemas import STEP_DIRS, PipelineState, StepName, StepStatus
 from yt_dbl.utils.audio import get_audio_duration
 
 if TYPE_CHECKING:
@@ -47,7 +47,7 @@ def _download_first(
     cfg = Settings(work_dir=work_dir)
     state = PipelineState(video_id=video_id, url=url)
 
-    dl_dir = cfg.step_dir(video_id, "01_download")
+    dl_dir = cfg.step_dir(video_id, STEP_DIRS[StepName.DOWNLOAD])
     dl_step = DownloadStep(settings=cfg, work_dir=dl_dir)
     state = dl_step.run(state)
     return cfg, state
@@ -61,7 +61,7 @@ class TestE2ESeparate:
         """Separate "Me at the zoo" and verify both stems are created."""
         cfg, state = _download_first(e2e_work_dir)
 
-        sep_dir = cfg.step_dir(SHORT_VIDEO_ID, "02_separate")
+        sep_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.SEPARATE])
         step = SeparateStep(settings=cfg, work_dir=sep_dir)
         state = step.run(state)
 
@@ -83,7 +83,7 @@ class TestE2ESeparate:
         """Verify that separated stems are valid WAV files with plausible durations."""
         cfg, state = _download_first(e2e_work_dir)
 
-        sep_dir = cfg.step_dir(SHORT_VIDEO_ID, "02_separate")
+        sep_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.SEPARATE])
         step = SeparateStep(settings=cfg, work_dir=sep_dir)
         state = step.run(state)
 
@@ -105,7 +105,7 @@ class TestE2ESeparate:
         """Running separation twice reuses cached outputs."""
         cfg, state = _download_first(e2e_work_dir)
 
-        sep_dir = cfg.step_dir(SHORT_VIDEO_ID, "02_separate")
+        sep_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.SEPARATE])
         step = SeparateStep(settings=cfg, work_dir=sep_dir)
 
         # First run — real separation
@@ -127,7 +127,7 @@ class TestE2ESeparate:
         """After separation, only vocals.wav and background.wav should remain."""
         cfg, state = _download_first(e2e_work_dir)
 
-        sep_dir = cfg.step_dir(SHORT_VIDEO_ID, "02_separate")
+        sep_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.SEPARATE])
         step = SeparateStep(settings=cfg, work_dir=sep_dir)
         step.run(state)
 

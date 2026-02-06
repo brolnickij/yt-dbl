@@ -9,6 +9,7 @@ import pytest
 
 from yt_dbl.config import Settings
 from yt_dbl.schemas import (
+    STEP_DIRS,
     PipelineState,
     StepName,
     StepStatus,
@@ -100,7 +101,7 @@ def prefill_download(state: PipelineState, cfg: Settings) -> PipelineState:
     step.status = StepStatus.COMPLETED
     step.outputs = {"video": "video.mp4", "audio": "audio.wav"}
 
-    step_dir = cfg.step_dir(state.video_id, "01_download")
+    step_dir = cfg.step_dir(state.video_id, STEP_DIRS[StepName.DOWNLOAD])
     (step_dir / "video.mp4").write_bytes(b"fake-video")
     (step_dir / "audio.wav").write_bytes(b"fake-audio")
     return state
@@ -115,7 +116,7 @@ def prefill_separate(state: PipelineState, cfg: Settings) -> PipelineState:
     step.status = StepStatus.COMPLETED
     step.outputs = {"vocals": "vocals.wav", "background": "background.wav"}
 
-    step_dir = cfg.step_dir(state.video_id, "02_separate")
+    step_dir = cfg.step_dir(state.video_id, STEP_DIRS[StepName.SEPARATE])
     (step_dir / "vocals.wav").write_bytes(b"fake-vocals")
     (step_dir / "background.wav").write_bytes(b"fake-background")
     return state
@@ -135,7 +136,7 @@ def prefill_translate(state: PipelineState, cfg: Settings) -> PipelineState:
     step.status = StepStatus.COMPLETED
     step.outputs = {"translations": "translations.json", "subtitles": "subtitles.srt"}
 
-    step_dir = cfg.step_dir(state.video_id, "04_translate")
+    step_dir = cfg.step_dir(state.video_id, STEP_DIRS[StepName.TRANSLATE])
     data = [{"id": seg.id, "translated_text": seg.translated_text} for seg in state.segments]
     (step_dir / "translations.json").write_text(
         _json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -159,7 +160,7 @@ def prefill_synthesize(state: PipelineState, cfg: Settings) -> PipelineState:
     step.outputs = {f"seg_{seg.id}": seg.synth_path for seg in state.segments}
     step.outputs["meta"] = "synth_meta.json"
 
-    step_dir = cfg.step_dir(state.video_id, "05_synthesize")
+    step_dir = cfg.step_dir(state.video_id, STEP_DIRS[StepName.SYNTHESIZE])
     for seg in state.segments:
         (step_dir / seg.synth_path).write_bytes(b"fake-synth")
 
@@ -226,7 +227,7 @@ def prefill_transcribe(state: PipelineState, cfg: Settings) -> PipelineState:
 
     import json
 
-    step_dir = cfg.step_dir(state.video_id, "03_transcribe")
+    step_dir = cfg.step_dir(state.video_id, STEP_DIRS[StepName.TRANSCRIBE])
     data = {
         "segments": [s.model_dump() for s in state.segments],
         "speakers": [s.model_dump() for s in state.speakers],

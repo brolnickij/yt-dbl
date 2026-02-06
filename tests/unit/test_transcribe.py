@@ -12,12 +12,12 @@ import pytest
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.base import StepValidationError
 from yt_dbl.pipeline.transcribe import (
-    _ALIGNER_LANGUAGE_MAP,
     SEGMENTS_FILE,
     TranscribeStep,
     _reference_score,
 )
-from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, StepStatus, Word
+from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, Speaker, StepName, StepStatus, Word
+from yt_dbl.utils.languages import ALIGNER_LANGUAGE_MAP
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -88,7 +88,7 @@ def _make_align_result(words: list[str], start: float, duration: float) -> _Fake
 
 def _make_step(tmp_path: Path) -> tuple[TranscribeStep, Settings, PipelineState]:
     cfg = Settings(work_dir=tmp_path / "work")
-    step_dir = cfg.step_dir("test123", "03_transcribe")
+    step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSCRIBE])
     step = TranscribeStep(settings=cfg, work_dir=step_dir)
     state = PipelineState(video_id="test123", url="https://example.com")
 
@@ -96,13 +96,13 @@ def _make_step(tmp_path: Path) -> tuple[TranscribeStep, Settings, PipelineState]
     dl = state.get_step(StepName.DOWNLOAD)
     dl.status = StepStatus.COMPLETED
     dl.outputs = {"video": "video.mp4", "audio": "audio.wav"}
-    dl_dir = cfg.step_dir("test123", "01_download")
+    dl_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
     (dl_dir / "audio.wav").write_bytes(b"fake")
 
     sep = state.get_step(StepName.SEPARATE)
     sep.status = StepStatus.COMPLETED
     sep.outputs = {"vocals": "vocals.wav", "background": "background.wav"}
-    sep_dir = cfg.step_dir("test123", "02_separate")
+    sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
     (sep_dir / "vocals.wav").write_bytes(b"fake-vocals")
     (sep_dir / "background.wav").write_bytes(b"fake-bg")
 
@@ -573,8 +573,8 @@ class TestTranscriptionConfig:
 class TestLanguageMap:
     def test_common_languages_present(self) -> None:
         for code in ("en", "ru", "zh", "ja", "ko", "de", "fr", "es"):
-            assert code in _ALIGNER_LANGUAGE_MAP
+            assert code in ALIGNER_LANGUAGE_MAP
 
     def test_values_are_capitalized(self) -> None:
-        for lang in _ALIGNER_LANGUAGE_MAP.values():
+        for lang in ALIGNER_LANGUAGE_MAP.values():
             assert lang[0].isupper()

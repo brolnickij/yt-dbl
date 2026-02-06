@@ -10,7 +10,7 @@ import pytest
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.base import SeparationError, StepValidationError
 from yt_dbl.pipeline.separate import SeparateStep
-from yt_dbl.schemas import PipelineState, StepName, StepStatus
+from yt_dbl.schemas import STEP_DIRS, PipelineState, StepName, StepStatus
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class TestSeparateStepValidation:
     def _make(self, tmp_path: Path) -> tuple[SeparateStep, Settings, PipelineState]:
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "02_separate")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
         step = SeparateStep(settings=cfg, work_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://example.com")
         return step, cfg, state
@@ -45,7 +45,7 @@ class TestSeparateStepValidation:
         dl.status = StepStatus.COMPLETED
         dl.outputs = {"video": "video.mp4", "audio": "audio.wav"}
         # Create the actual file
-        dl_dir = cfg.step_dir("test123", "01_download")
+        dl_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         (dl_dir / "audio.wav").write_bytes(b"fake-audio")
         step.validate_inputs(state)  # Should not raise
 
@@ -53,14 +53,14 @@ class TestSeparateStepValidation:
 class TestSeparateStepRun:
     def _setup(self, tmp_path: Path) -> tuple[SeparateStep, Settings, PipelineState]:
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "02_separate")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
         step = SeparateStep(settings=cfg, work_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://example.com")
         # Prefill download
         dl = state.get_step(StepName.DOWNLOAD)
         dl.status = StepStatus.COMPLETED
         dl.outputs = {"video": "video.mp4", "audio": "audio.wav"}
-        dl_dir = cfg.step_dir("test123", "01_download")
+        dl_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         (dl_dir / "audio.wav").write_bytes(b"fake-audio-content")
         return step, cfg, state
 
@@ -142,7 +142,7 @@ class TestSeparateStepRun:
 class TestRenameOutputs:
     def _make_step(self, tmp_path: Path) -> SeparateStep:
         cfg = Settings(work_dir=tmp_path / "work")
-        step_dir = cfg.step_dir("test123", "02_separate")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
         return SeparateStep(settings=cfg, work_dir=step_dir)
 
     def test_renames_standard_output_files(self, tmp_path: Path) -> None:

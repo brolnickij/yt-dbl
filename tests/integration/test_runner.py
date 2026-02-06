@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from tests.conftest import prefill_download
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.runner import PipelineRunner, load_state, save_state
-from yt_dbl.schemas import PipelineState, Segment, StepName, StepStatus
+from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName, StepStatus
 
 
 def _fake_separation_factory(sep_dir: Path) -> Any:
@@ -202,7 +202,7 @@ class TestPipelineRunner:
         state = prefill_download(state, cfg)
         save_state(state, cfg)
 
-        sep_dir = cfg.step_dir("test123", "02_separate")
+        sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
 
         runner = PipelineRunner(cfg)
         with _pipeline_patches(sep_dir):
@@ -223,7 +223,7 @@ class TestPipelineRunner:
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
-        sep_dir = cfg.step_dir("test123", "02_separate")
+        sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
 
         runner = PipelineRunner(cfg)
         with _pipeline_patches(sep_dir):
@@ -243,7 +243,7 @@ class TestPipelineRunner:
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
-        sep_dir = cfg.step_dir("test123", "02_separate")
+        sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
 
         runner = PipelineRunner(cfg)
         with _pipeline_patches(sep_dir):
@@ -278,7 +278,7 @@ class TestPipelineRunner:
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
-        sep_dir = cfg.step_dir("test123", "02_separate")
+        sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
 
         runner = PipelineRunner(cfg)
         with _pipeline_patches(sep_dir):
@@ -313,7 +313,7 @@ class TestPipelineRunner:
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
 
-        sep_dir = cfg.step_dir("test123", "02_separate")
+        sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
 
         runner = PipelineRunner(cfg)
         with _pipeline_patches(sep_dir):

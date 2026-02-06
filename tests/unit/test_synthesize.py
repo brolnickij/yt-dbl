@@ -17,7 +17,7 @@ from yt_dbl.pipeline.synthesize import (
     SynthesizeStep,
     _find_ref_text_for_speaker,
 )
-from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, StepStatus, Word
+from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, Speaker, StepName, StepStatus, Word
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ def _make_speakers() -> list[Speaker]:
 
 def _make_step(tmp_path: Path) -> tuple[SynthesizeStep, Settings, PipelineState]:
     cfg = Settings(work_dir=tmp_path / "work")
-    step_dir = cfg.step_dir("test123", "05_synthesize")
+    step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SYNTHESIZE])
     step = SynthesizeStep(settings=cfg, work_dir=step_dir)
 
     state = PipelineState(video_id="test123", url="https://example.com")
@@ -109,7 +109,7 @@ def _make_step(tmp_path: Path) -> tuple[SynthesizeStep, Settings, PipelineState]
     trans.status = StepStatus.COMPLETED
 
     # Create fake vocals file
-    sep_dir = cfg.step_dir("test123", "02_separate")
+    sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
     (sep_dir / "vocals.wav").write_bytes(b"fake-vocals")
 
     return step, cfg, state
@@ -351,18 +351,4 @@ class TestSynthesisConfig:
         assert cfg.tts_model == "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16"
 
 
-# ── Speaker helper tests ───────────────────────────────────────────────────
-
-
-class TestSpeakerById:
-    def test_finds_existing(self, tmp_path: Path) -> None:
-        step, _, state = _make_step(tmp_path)
-        s = step._speaker_by_id(state, "SPEAKER_00")
-        assert s.id == "SPEAKER_00"
-        assert s.total_duration == 7.5
-
-    def test_returns_default_for_unknown(self, tmp_path: Path) -> None:
-        step, _, state = _make_step(tmp_path)
-        s = step._speaker_by_id(state, "SPEAKER_99")
-        assert s.id == "SPEAKER_99"
-        assert s.total_duration == 0.0
+# ── Speaker helper tests

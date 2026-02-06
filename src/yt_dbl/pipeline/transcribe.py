@@ -15,68 +15,11 @@ from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep, StepValidationError
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, Word
+from yt_dbl.utils.languages import ALIGNER_LANGUAGE_MAP
 from yt_dbl.utils.logging import console, create_progress, log_info, suppress_library_noise
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-# Language code → full name for ForcedAligner API
-_ALIGNER_LANGUAGE_MAP: dict[str, str] = {
-    "en": "English",
-    "ru": "Russian",
-    "de": "German",
-    "fr": "French",
-    "es": "Spanish",
-    "it": "Italian",
-    "pt": "Portuguese",
-    "zh": "Chinese",
-    "ja": "Japanese",
-    "ko": "Korean",
-    "ar": "Arabic",
-    "hi": "Hindi",
-    "tr": "Turkish",
-    "nl": "Dutch",
-    "pl": "Polish",
-    "uk": "Ukrainian",
-    "cs": "Czech",
-    "sv": "Swedish",
-    "vi": "Vietnamese",
-    "th": "Thai",
-    "id": "Indonesian",
-    "ms": "Malay",
-    "fi": "Finnish",
-    "da": "Danish",
-    "no": "Norwegian",
-    "ro": "Romanian",
-    "hu": "Hungarian",
-    "el": "Greek",
-    "he": "Hebrew",
-    "bg": "Bulgarian",
-    "hr": "Croatian",
-    "sr": "Serbian",
-    "sk": "Slovak",
-    "sl": "Slovenian",
-    "lt": "Lithuanian",
-    "lv": "Latvian",
-    "et": "Estonian",
-    "ka": "Georgian",
-    "fa": "Persian",
-    "ur": "Urdu",
-    "bn": "Bengali",
-    "ta": "Tamil",
-    "te": "Telugu",
-    "mr": "Marathi",
-    "gu": "Gujarati",
-    "kn": "Kannada",
-    "ml": "Malayalam",
-    "sw": "Swahili",
-    "af": "Afrikaans",
-    "ca": "Catalan",
-    "eu": "Basque",
-    "gl": "Galician",
-    "cy": "Welsh",
-    "is": "Icelandic",
-}
 
 SEGMENTS_FILE = "segments.json"
 
@@ -310,7 +253,7 @@ class TranscribeStep(PipelineStep):
         else:
             aligner = self._load_stt(aligner_name)
 
-        lang_full = _ALIGNER_LANGUAGE_MAP.get(detected_lang, "English")
+        lang_full = ALIGNER_LANGUAGE_MAP.get(detected_lang, "English")
 
         # Load the whole audio file once (16 kHz mono mx.array)
         audio_array = self._load_audio_array(vocals_path)

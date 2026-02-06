@@ -20,33 +20,13 @@ from yt_dbl.utils.audio_processing import (
     extract_voice_reference,
     postprocess_segment,
 )
+from yt_dbl.utils.languages import TTS_LANG_MAP
 from yt_dbl.utils.logging import create_progress, log_info, suppress_library_noise
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 SYNTH_META_FILE = "synth_meta.json"
-
-# ── Language mapping for Qwen3-TTS ──────────────────────────────────────────
-
-_TTS_LANG_MAP: dict[str, str] = {
-    "ru": "russian",
-    "en": "english",
-    "de": "german",
-    "fr": "french",
-    "es": "spanish",
-    "it": "italian",
-    "pt": "portuguese",
-    "zh": "chinese",
-    "ja": "japanese",
-    "ko": "korean",
-    "ar": "arabic",
-    "hi": "hindi",
-    "tr": "turkish",
-    "nl": "dutch",
-    "pl": "polish",
-    "uk": "ukrainian",
-}
 
 
 # ── TTS generation ──────────────────────────────────────────────────────────
@@ -162,7 +142,7 @@ class SynthesizeStep(PipelineStep):
     ) -> None:
         """Run TTS for each segment using speaker's voice reference."""
         model = self._load_tts_model()
-        lang = _TTS_LANG_MAP.get(state.target_language, "auto")
+        lang = TTS_LANG_MAP.get(state.target_language, "auto")
         total = len(state.segments)
 
         # Pre-compute ref text map to avoid O(N²) scans
@@ -343,14 +323,6 @@ class SynthesizeStep(PipelineStep):
         if arr.ndim > 1:
             arr = arr.squeeze()
         sf.write(str(path), arr, sample_rate)
-
-    @staticmethod
-    def _speaker_by_id(state: PipelineState, speaker_id: str) -> Speaker:
-        """Find a speaker by ID, fallback to a default."""
-        for s in state.speakers:
-            if s.id == speaker_id:
-                return s
-        return Speaker(id=speaker_id)
 
     # ── Persistence ─────────────────────────────────────────────────────────
 

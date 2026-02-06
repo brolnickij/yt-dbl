@@ -17,7 +17,7 @@ from yt_dbl.config import Settings
 from yt_dbl.pipeline.download import DownloadStep
 from yt_dbl.pipeline.separate import SeparateStep
 from yt_dbl.pipeline.transcribe import TranscribeStep
-from yt_dbl.schemas import PipelineState, StepName, StepStatus
+from yt_dbl.schemas import STEP_DIRS, PipelineState, StepName, StepStatus
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,11 +48,11 @@ def _download_and_separate(
     cfg = Settings(work_dir=work_dir)
     state = PipelineState(video_id=video_id, url=url)
 
-    dl_dir = cfg.step_dir(video_id, "01_download")
+    dl_dir = cfg.step_dir(video_id, STEP_DIRS[StepName.DOWNLOAD])
     dl_step = DownloadStep(settings=cfg, work_dir=dl_dir)
     state = dl_step.run(state)
 
-    sep_dir = cfg.step_dir(video_id, "02_separate")
+    sep_dir = cfg.step_dir(video_id, STEP_DIRS[StepName.SEPARATE])
     sep_step = SeparateStep(settings=cfg, work_dir=sep_dir)
     state = sep_step.run(state)
 
@@ -68,7 +68,7 @@ class TestE2ETranscribe:
         """Transcribe 'Me at the zoo' and verify segments + speakers."""
         cfg, state = _download_and_separate(e2e_work_dir)
 
-        trans_dir = cfg.step_dir(SHORT_VIDEO_ID, "03_transcribe")
+        trans_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.TRANSCRIBE])
         step = TranscribeStep(settings=cfg, work_dir=trans_dir)
         state = step.run(state)
 
@@ -105,7 +105,7 @@ class TestE2ETranscribe:
         """Running transcription twice reuses cached segments.json."""
         cfg, state = _download_and_separate(e2e_work_dir)
 
-        trans_dir = cfg.step_dir(SHORT_VIDEO_ID, "03_transcribe")
+        trans_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.TRANSCRIBE])
         step = TranscribeStep(settings=cfg, work_dir=trans_dir)
 
         # First run — real transcription

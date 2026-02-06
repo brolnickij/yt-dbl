@@ -12,7 +12,7 @@ import pytest
 
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.download import DownloadStep
-from yt_dbl.schemas import PipelineState, StepName, StepStatus
+from yt_dbl.schemas import STEP_DIRS, PipelineState, StepName, StepStatus
 from yt_dbl.utils.audio import get_audio_duration
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class TestE2EDownload:
         self, work_dir: Path, video_id: str = SHORT_VIDEO_ID, url: str = SHORT_VIDEO_URL
     ) -> tuple[DownloadStep, Settings, PipelineState]:
         cfg = Settings(work_dir=work_dir)
-        step_dir = cfg.step_dir(video_id, "01_download")
+        step_dir = cfg.step_dir(video_id, STEP_DIRS[StepName.DOWNLOAD])
         step = DownloadStep(settings=cfg, work_dir=step_dir)
         state = PipelineState(video_id=video_id, url=url)
         return step, cfg, state

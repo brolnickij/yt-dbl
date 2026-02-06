@@ -19,6 +19,7 @@ from yt_dbl.pipeline.assemble import (
 )
 from yt_dbl.pipeline.base import StepValidationError
 from yt_dbl.schemas import (
+    STEP_DIRS,
     PipelineState,
     Segment,
     Speaker,
@@ -88,7 +89,7 @@ def _write_wav(path: Path, duration_sec: float = 1.0, sample_rate: int = 48000) 
 def _make_step(tmp_path: Path) -> tuple[AssembleStep, Settings, PipelineState]:
     """Create an AssembleStep with a fully prefilled PipelineState."""
     cfg = Settings(work_dir=tmp_path / "work")
-    step_dir = cfg.step_dir("test123", "06_assemble")
+    step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.ASSEMBLE])
     step = AssembleStep(settings=cfg, work_dir=step_dir)
 
     state = PipelineState(
@@ -109,21 +110,21 @@ def _make_step(tmp_path: Path) -> tuple[AssembleStep, Settings, PipelineState]:
     dl = state.get_step(StepName.DOWNLOAD)
     dl.status = StepStatus.COMPLETED
     dl.outputs = {"video": "video.mp4", "audio": "audio.wav"}
-    dl_dir = cfg.step_dir("test123", "01_download")
+    dl_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
     (dl_dir / "video.mp4").write_bytes(b"fake-video")
 
     # Prefill separate step
     sep = state.get_step(StepName.SEPARATE)
     sep.status = StepStatus.COMPLETED
     sep.outputs = {"vocals": "vocals.wav", "background": "background.wav"}
-    sep_dir = cfg.step_dir("test123", "02_separate")
+    sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
     _write_wav(sep_dir / "background.wav", duration_sec=12.0)
 
     # Prefill translate step
     trans = state.get_step(StepName.TRANSLATE)
     trans.status = StepStatus.COMPLETED
     trans.outputs = {"translations": "translations.json", "subtitles": "subtitles.srt"}
-    trans_dir = cfg.step_dir("test123", "04_translate")
+    trans_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
     (trans_dir / "subtitles.srt").write_text(
         "1\n00:00:00,500 --> 00:00:03,500\nПривет\n", encoding="utf-8"
     )
@@ -132,7 +133,7 @@ def _make_step(tmp_path: Path) -> tuple[AssembleStep, Settings, PipelineState]:
     synth = state.get_step(StepName.SYNTHESIZE)
     synth.status = StepStatus.COMPLETED
     synth.outputs = {f"seg_{seg.id}": seg.synth_path for seg in state.segments}
-    synth_dir = cfg.step_dir("test123", "05_synthesize")
+    synth_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SYNTHESIZE])
     for seg in state.segments:
         _write_wav(synth_dir / seg.synth_path, duration_sec=seg.duration)
 
@@ -507,21 +508,21 @@ class TestAssembleStepRun:
     def test_run_mkv_format(self, tmp_path: Path) -> None:
         """Output file uses correct extension for mkv format."""
         cfg = Settings(work_dir=tmp_path / "work", output_format="mkv")
-        step_dir = cfg.step_dir("test123", "06_assemble")
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.ASSEMBLE])
         step = AssembleStep(settings=cfg, work_dir=step_dir)
 
         _, _, state = _make_step(tmp_path)
         # Recreate synth files in the new work_dir
-        synth_dir = cfg.step_dir("test123", "05_synthesize")
+        synth_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SYNTHESIZE])
         for seg in state.segments:
             _write_wav(synth_dir / seg.synth_path, duration_sec=seg.duration)
 
         # Recreate other step files
-        dl_dir = cfg.step_dir("test123", "01_download")
+        dl_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
         (dl_dir / "video.mp4").write_bytes(b"fake-video")
-        sep_dir = cfg.step_dir("test123", "02_separate")
+        sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
         _write_wav(sep_dir / "background.wav", duration_sec=12.0)
-        trans_dir = cfg.step_dir("test123", "04_translate")
+        trans_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
         (trans_dir / "subtitles.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nHi\n")
 
         with patch("yt_dbl.pipeline.assemble.run_ffmpeg"):

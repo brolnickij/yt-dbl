@@ -11,10 +11,6 @@ from __future__ import annotations
 from math import gcd
 from typing import TYPE_CHECKING
 
-import numpy as np
-import soundfile as sf
-from scipy.signal import resample_poly
-
 from yt_dbl.pipeline.base import PipelineStep, StepValidationError
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName
 from yt_dbl.utils.audio import get_audio_duration, run_ffmpeg
@@ -22,6 +18,8 @@ from yt_dbl.utils.logging import log_info
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import numpy as np
 
 SPEECH_TRACK_FILE = "speech.wav"
 CROSSFADE_MS = 50
@@ -43,6 +41,10 @@ def _build_speech_track(
     clicks at boundaries while maintaining constant energy.  Segments
     that happen to overlap are additively mixed.
     """
+    import numpy as np
+    import soundfile as sf
+    from scipy.signal import resample_poly
+
     total_samples = int(total_duration * sample_rate) + sample_rate  # +1 s safety
     track = np.zeros(total_samples, dtype=np.float32)
     fade_samples = int(crossfade_ms / 1000 * sample_rate)
@@ -235,6 +237,8 @@ class AssembleStep(PipelineStep):
         background_path = self._resolve_step_output(state, StepName.SEPARATE, "background")
         synth_dir = self.settings.step_dir(state.video_id, STEP_DIRS[StepName.SYNTHESIZE])
         subtitle_path = self._resolve_subtitle_path(state)
+
+        import soundfile as sf
 
         # Step 1: Build unified speech track
         log_info("Building speech track from segments...")

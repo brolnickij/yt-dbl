@@ -15,7 +15,7 @@ import pytest
 
 from yt_dbl.config import Settings
 from yt_dbl.pipeline.runner import PipelineRunner, load_state, save_state
-from yt_dbl.schemas import PipelineState, StepName, StepStatus
+from yt_dbl.schemas import STEP_DIRS, PipelineState, StepName, StepStatus
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -65,7 +65,7 @@ class TestE2EPipeline:
         assert state.next_step is None
 
         # Download artefacts exist
-        dl_dir = cfg.step_dir(SHORT_VIDEO_ID, "01_download")
+        dl_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.DOWNLOAD])
         assert (dl_dir / "video.mp4").exists()
         assert (dl_dir / "audio.wav").exists()
 

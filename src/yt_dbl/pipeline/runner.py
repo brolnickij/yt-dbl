@@ -26,6 +26,7 @@ from yt_dbl.utils.logging import (
 )
 
 from .assemble import AssembleStep
+from .base import StepValidationError
 from .download import DownloadStep
 from .separate import SeparateStep
 from .synthesize import SynthesizeStep
@@ -86,7 +87,7 @@ class PipelineRunner:
         self.settings = settings
         self.model_manager = ModelManager(max_loaded=settings.max_loaded_models)
 
-    def run(
+    def run(  # noqa: PLR0912
         self,
         state: PipelineState,
         from_step: StepName | None = None,
@@ -98,6 +99,17 @@ class PipelineRunner:
         log_info(f"Max models in memory: {self.model_manager.max_loaded}")
         log_info(f"Work dir: {self.settings.job_dir(state.video_id)}")
         console.print()
+
+        # Early validation: API key is needed unless translate step is already done
+        translate_result = state.get_step(StepName.TRANSLATE)
+        if translate_result.status != StepStatus.COMPLETED:
+            will_run = from_step is None or STEP_ORDER.index(from_step) <= STEP_ORDER.index(
+                StepName.TRANSLATE
+            )
+            if will_run and not self.settings.anthropic_api_key:
+                raise StepValidationError(
+                    "Anthropic API key required for translation — set YT_DBL_ANTHROPIC_API_KEY"
+                )
 
         started = not from_step
 
