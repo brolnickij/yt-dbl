@@ -17,7 +17,7 @@ from yt_dbl.pipeline.transcribe import (
     _reference_score,
 )
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, Speaker, StepName, StepStatus, Word
-from yt_dbl.utils.languages import ALIGNER_LANGUAGE_MAP
+from yt_dbl.utils.languages import ALIGNER_LANGUAGE_MAP, TTS_LANG_MAP
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -590,3 +590,18 @@ class TestLanguageMap:
     def test_values_are_capitalized(self) -> None:
         for lang in ALIGNER_LANGUAGE_MAP.values():
             assert lang[0].isupper()
+
+
+class TestTTSLangMap:
+    def test_common_languages_present(self) -> None:
+        for code in ("en", "ru", "zh", "ja", "de", "fr", "es"):
+            assert code in TTS_LANG_MAP
+
+    def test_values_are_lowercase(self) -> None:
+        for lang in TTS_LANG_MAP.values():
+            assert lang == lang.lower()
+
+    def test_subset_of_aligner_map(self) -> None:
+        """Every TTS language should also be in the aligner map."""
+        for code in TTS_LANG_MAP:
+            assert code in ALIGNER_LANGUAGE_MAP
