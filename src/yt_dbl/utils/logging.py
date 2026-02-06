@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import time
+import warnings
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
@@ -119,6 +122,60 @@ def create_progress() -> Progress:
         console=console,
         transient=True,
     )
+
+
+# ── Library noise suppression ───────────────────────────────────────────────
+
+_NOISY_LOGGERS = (
+    "huggingface_hub",
+    "transformers",
+    "tokenizers",
+    "mlx_audio",
+    "tqdm",
+    "filelock",
+)
+
+
+@contextmanager
+def suppress_library_noise() -> Generator[None, None, None]:
+    """Silence noisy HuggingFace / transformers / tqdm output during model loading.
+
+    Suppresses:
+    - HF Hub download progress bars
+    - "You are using a model of type ..." warnings
+    - Tokenizer regex warnings
+    - tqdm progress bars
+    """
+    old_env: dict[str, str | None] = {}
+    env_overrides = {
+        "HF_HUB_DISABLE_PROGRESS_BARS": "1",
+        "TRANSFORMERS_NO_ADVISORY_WARNINGS": "1",
+        "TOKENIZERS_PARALLELISM": "false",
+    }
+    for key, val in env_overrides.items():
+        old_env[key] = os.environ.get(key)
+        os.environ[key] = val
+
+    saved_levels: dict[str, int] = {}
+    for name in _NOISY_LOGGERS:
+        logger = logging.getLogger(name)
+        saved_levels[name] = logger.level
+        logger.setLevel(logging.ERROR)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*model of type.*")
+        warnings.filterwarnings("ignore", message=".*incorrect regex pattern.*")
+        warnings.filterwarnings("ignore", message=".*fix_mistral_regex.*")
+        try:
+            yield
+        finally:
+            for name, level in saved_levels.items():
+                logging.getLogger(name).setLevel(level)
+            for key, old_val in old_env.items():
+                if old_val is not None:
+                    os.environ[key] = old_val
+                else:
+                    os.environ.pop(key, None)
 
 
 # ── Timer context manager ──────────────────────────────────────────────────

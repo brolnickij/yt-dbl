@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from yt_dbl.pipeline.base import PipelineStep
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName
 from yt_dbl.utils.audio import get_audio_duration, run_ffmpeg
-from yt_dbl.utils.logging import create_progress, log_info
+from yt_dbl.utils.logging import create_progress, log_info, suppress_library_noise
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -318,7 +318,8 @@ class SynthesizeStep(PipelineStep):
 
         model_name = self.settings.tts_model
         log_info(f"Loading TTS model: {model_name}")
-        return load_model(model_name)
+        with suppress_library_noise():
+            return load_model(model_name)
 
     def _run_tts(
         self,

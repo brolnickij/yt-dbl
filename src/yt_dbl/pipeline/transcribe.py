@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, Word
-from yt_dbl.utils.logging import console, create_progress, log_info
+from yt_dbl.utils.logging import console, create_progress, log_info, suppress_library_noise
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -143,7 +143,8 @@ class TranscribeStep(PipelineStep):
 
         model_name = self.settings.transcription_asr_model
         log_info(f"Loading ASR model: {model_name}")
-        model = load_stt_model(model_name)
+        with suppress_library_noise():
+            model = load_stt_model(model_name)
 
         with console.status(
             "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
@@ -195,7 +196,8 @@ class TranscribeStep(PipelineStep):
 
         aligner_name = self.settings.transcription_aligner_model
         log_info(f"Loading aligner model: {aligner_name}")
-        aligner = load_stt_model(aligner_name)
+        with suppress_library_noise():
+            aligner = load_stt_model(aligner_name)
 
         # Determine language for aligner
         lang_full = _ALIGNER_LANGUAGE_MAP.get(self._detect_language(raw_segments), "English")
