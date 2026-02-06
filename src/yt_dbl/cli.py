@@ -192,32 +192,73 @@ def status(
 @models_app.command("list")
 def models_list() -> None:
     """Show status of ML models."""
+    from yt_dbl.models.registry import (
+        _SEPARATOR_MODEL,
+        MODEL_REGISTRY,
+        _format_size,
+        check_model_downloaded,
+        check_separator_downloaded,
+        get_model_size,
+    )
+
     table = Table(title="ML Models")
     table.add_column("Model", style="magenta")
+    table.add_column("Purpose")
     table.add_column("Status")
-    table.add_column("Size")
+    table.add_column("Size", justify="right")
 
-    model_info = [
-        ("MelBand-RoFormer", "separation", "~200 MB"),
-        ("HTDemucs6", "separation", "~80 MB"),
-        ("Qwen3-ASR 1.7B", "transcription", "~1.7 GB"),
-        ("Qwen3-ForcedAligner 0.6B", "alignment", "~600 MB"),
-        ("Qwen3-TTS 1.7B Base", "synthesis", "~1.7 GB"),
-    ]
+    total_size = 0
 
-    for name, purpose, size in model_info:
-        # TODO: check actual download status
-        table.add_row(name, f"[dim]{purpose} — not checked[/dim]", size)
+    for info in MODEL_REGISTRY:
+        downloaded = check_model_downloaded(info.repo_id)
+        size_bytes = get_model_size(info.repo_id) if downloaded else 0
+        total_size += size_bytes
+
+        status_str = "[green]✓ downloaded[/green]" if downloaded else "[dim]not downloaded[/dim]"
+        size_str = _format_size(size_bytes) if downloaded else info.approx_size
+
+        table.add_row(info.repo_id.split("/")[-1], info.purpose, status_str, size_str)
+
+    # Separator model (non-HF)
+    sep_downloaded = check_separator_downloaded(settings.model_cache_dir)
+    sep_status = "[green]✓ downloaded[/green]" if sep_downloaded else "[dim]not downloaded[/dim]"
+    sep_size = ""
+    if sep_downloaded:
+        sep_path = settings.model_cache_dir / _SEPARATOR_MODEL
+        sep_bytes = sep_path.stat().st_size
+        total_size += sep_bytes
+        sep_size = _format_size(sep_bytes)
+    else:
+        sep_size = "~200 MB"
+
+    table.add_row("MelBand-RoFormer", "Vocal separation", sep_status, sep_size)
 
     console.print(table)
-    console.print("\n  [info]Use 'yt-dbl models download' to pre-download all models[/info]")
+
+    if total_size > 0:
+        console.print(f"\n  Total cached: {_format_size(total_size)}")
+    console.print("  [info]Use 'yt-dbl models download' to pre-download all models[/info]")
 
 
 @models_app.command("download")
 def models_download() -> None:
     """Pre-download all required ML models."""
-    console.print("[info]Model download not yet implemented (stub).[/info]")
-    console.print("[info]Models will be downloaded automatically on first use.[/info]")
+    from yt_dbl.models.registry import MODEL_REGISTRY, check_model_downloaded, download_model
+
+    for info in MODEL_REGISTRY:
+        if check_model_downloaded(info.repo_id):
+            console.print(f"  [green]✓[/green] {info.repo_id} — already downloaded")
+            continue
+
+        console.print(f"  [info]↓ Downloading {info.repo_id} ({info.approx_size})...[/info]")
+        try:
+            download_model(info.repo_id)
+            console.print(f"  [green]✓[/green] {info.repo_id}")
+        except Exception as exc:
+            console.print(f"  [error]✗ {info.repo_id}: {exc}[/error]")
+
+    console.print("\n  [info]Separator model downloads automatically on first use.[/info]")
+    console.print("[success]Done![/success]")
 
 
 # ── Version ─────────────────────────────────────────────────────────────────
