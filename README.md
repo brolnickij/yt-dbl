@@ -1,6 +1,7 @@
 # yt-dbl
 > [!WARNING]
 > Работает **только на Apple Silicon** (M1/M2/M3/M4), весь ML-inference выполняется через MLX на Metal GPU
+>
 > Тестировалось на **M4 Pro** (20-core GPU, 48 GB unified memory)
 
 CLI-инструмент для автоматического дубляжа YouTube-видео с клонированием голоса
