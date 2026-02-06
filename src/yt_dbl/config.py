@@ -153,7 +153,7 @@ class Settings(BaseSettings):
     tts_sample_rate: int = 24000  # Qwen3-TTS native output rate (model.sample_rate)
 
     # ── Translation ─────────────────────────────────────────────────────────
-    claude_model: str = "claude-opus-4-6"
+    claude_model: str = "claude-sonnet-4-5"
 
     def job_dir(self, video_id: str) -> Path:
         """Return the working directory for a specific video job."""

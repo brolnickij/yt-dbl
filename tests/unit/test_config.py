@@ -19,7 +19,7 @@ class TestSettings:
         assert s.max_loaded_models >= 1  # auto-detected based on RAM
         assert s.separation_batch_size >= 1  # auto-detected based on RAM
         assert s.sample_rate == 48000
-        assert s.claude_model == "claude-opus-4-6"
+        assert s.claude_model == "claude-sonnet-4-5"
 
     def test_max_loaded_models_auto(self) -> None:
         """Default 0 triggers auto-detection → always ≥ 1."""

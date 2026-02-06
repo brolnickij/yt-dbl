@@ -3,6 +3,10 @@ CLI-инструмент для автоматического дубляжа Yo
 
 Весь ML-inference (ASR, alignment, TTS) выполняется локально на Apple Silicon через [MLX](https://github.com/ml-explore/mlx). Для перевода используется Claude API. Результат — видеофайл с озвучкой голосом оригинального спикера на целевом языке
 
+> [!WARNING]
+> Работает **только на Apple Silicon** (M1/M2/M3/M4). Весь ML-inference выполняется через MLX на Metal GPU.
+> Тестировалось на **M4 Pro** (20-core GPU, 48 GB unified memory).
+
 ## Как это работает
 ```
                         ┌────────────────┐
@@ -42,7 +46,7 @@ CLI-инструмент для автоматического дубляжа Yo
                           ▼             │
                 ┌───────────────────┐   │
                 │  4. TRANSLATE     │   │
-                │  Claude Opus 4.6  │   │
+                │  Claude Sonnet 4.5 │   │
                 │  (API)            │   │
                 │  → перевод        │   │
                 │  → subtitles.srt  │   │
@@ -249,7 +253,7 @@ YT_DBL_SAMPLE_RATE=48000
 | [Qwen3-ForcedAligner](https://huggingface.co/mlx-community/Qwen3-ForcedAligner-0.6B-8bit) | ~600 MB | Word-level alignment | MLX (Metal) |
 | [Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16) | ~1.7 GB | TTS с клонированием голоса | MLX (Metal) |
 | MelBand-RoFormer (BS-RoFormer) | ~200 MB | Разделение голоса и фона | ONNX + CoreML |
-| Claude Opus 4.6 | — | Перевод текста | API (Anthropic) |
+| Claude Sonnet 4.5 | — | Перевод текста | API (Anthropic) |
 
 ### Поддерживаемые языки
 **TTS (синтез):** русский, английский, немецкий, французский, испанский, итальянский, португальский, китайский, японский, корейский, арабский, хинди, турецкий, нидерландский, польский, украинский.

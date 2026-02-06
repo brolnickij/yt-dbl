@@ -309,7 +309,7 @@ class TestTranslateStepRun:
 class TestTranslationConfig:
     def test_default_claude_model(self) -> None:
         cfg = Settings(_env_file=None)  # type: ignore[call-arg]
-        assert cfg.claude_model == "claude-opus-4-6"
+        assert cfg.claude_model == "claude-sonnet-4-5"
 
     def test_custom_model_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("YT_DBL_CLAUDE_MODEL", "claude-sonnet-4-5")

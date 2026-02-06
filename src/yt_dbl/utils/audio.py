@@ -7,7 +7,7 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
-__all__ = ["extract_audio", "get_audio_duration", "replace_audio", "run_ffmpeg"]
+__all__ = ["extract_audio", "get_audio_duration", "run_ffmpeg"]
 
 # Preferred ffmpeg-full path (brew keg-only install)
 _FFMPEG_FULL_BIN = "/opt/homebrew/opt/ffmpeg-full/bin"
@@ -71,38 +71,6 @@ def extract_audio(
     if mono:
         args += ["-ac", "1"]
     args += ["-ar", str(sample_rate), "-vn", str(output_path)]
-    run_ffmpeg(args)
-    return output_path
-
-
-def replace_audio(
-    video_path: Path,
-    audio_path: Path,
-    output_path: Path,
-    subtitle_path: Path | None = None,
-) -> Path:
-    """Replace audio track in video, optionally burn in subtitles."""
-    args = [
-        "-i",
-        str(video_path),
-        "-i",
-        str(audio_path),
-        "-map",
-        "0:v:0",
-        "-map",
-        "1:a:0",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "320k",  # High-quality AAC
-    ]
-    if subtitle_path:
-        # Need to re-encode video when burning subtitles
-        args += ["-vf", f"subtitles={subtitle_path}"]
-    else:
-        # No subtitles — copy video stream as-is
-        args += ["-c:v", "copy"]
-    args.append(str(output_path))
     run_ffmpeg(args)
     return output_path
 

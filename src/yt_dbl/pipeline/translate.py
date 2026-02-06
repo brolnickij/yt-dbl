@@ -1,6 +1,6 @@
 """Step 4: Translate segments via Claude API (single-pass).
 
-Sends all transcript segments to Claude Opus 4.6 in a single call.
+Sends all transcript segments to Claude Sonnet 4.5 in a single call.
 The model translates, self-reflects, and returns the final adapted result
 in one pass — leveraging the 1M token context window.
 """
@@ -139,7 +139,7 @@ def _format_srt_time(seconds: float) -> str:
 
 class TranslateStep(PipelineStep):
     name = StepName.TRANSLATE
-    description = "Translate via Claude Opus 4.6 (single-pass)"
+    description = "Translate via Claude Sonnet 4.5 (single-pass)"
 
     # ── validation ──────────────────────────────────────────────────────────
 

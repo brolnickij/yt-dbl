@@ -14,7 +14,6 @@ from yt_dbl.utils.audio import (
     extract_audio,
     get_audio_duration,
     has_rubberband,
-    replace_audio,
     run_ffmpeg,
 )
 
@@ -141,38 +140,6 @@ class TestExtractAudio:
         args = mock_ff.call_args[0][0]
         assert "16000" in args
         assert "-ac" not in args  # stereo — no -ac flag
-
-
-class TestReplaceAudio:
-    @patch("yt_dbl.utils.audio.run_ffmpeg")
-    def test_without_subtitles(self, mock_ff: MagicMock, tmp_path: Path) -> None:
-        video = tmp_path / "video.mp4"
-        audio = tmp_path / "dubbed.wav"
-        out = tmp_path / "final.mp4"
-        result = replace_audio(video, audio, out)
-
-        assert result == out
-        args = mock_ff.call_args[0][0]
-        assert "-c:v" in args
-        assert "copy" in args
-        assert "-c:a" in args
-        assert "aac" in args
-        assert "-b:a" in args
-        assert "320k" in args
-        # No -vf subtitles=... flag
-        assert "-vf" not in args
-
-    @patch("yt_dbl.utils.audio.run_ffmpeg")
-    def test_with_subtitles(self, mock_ff: MagicMock, tmp_path: Path) -> None:
-        video = tmp_path / "video.mp4"
-        audio = tmp_path / "dubbed.wav"
-        out = tmp_path / "final.mp4"
-        subs = tmp_path / "subs.srt"
-        replace_audio(video, audio, out, subtitle_path=subs)
-
-        args = mock_ff.call_args[0][0]
-        # When subtitles: no -c:v copy (need re-encode for burn-in)
-        assert f"subtitles={subs}" in " ".join(args)
 
 
 class TestGetAudioDuration:
