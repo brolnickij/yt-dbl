@@ -43,11 +43,13 @@ brew install yt-dlp
 ### 2. Install yt-dbl
 ```bash
 # From PyPI (recommended)
-uv tool install yt-dbl
+uv tool install --prerelease=allow yt-dbl
 
 # Or with pipx
 pipx install yt-dbl
 ```
+
+> **Note:** `--prerelease=allow` is needed because `mlx-audio` depends on a pre-release version of `transformers`.
 
 <details>
 <summary>From source</summary>
