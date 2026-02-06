@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from yt_dbl.models.manager import ModelManager
 from yt_dbl.schemas import (
     STEP_DIRS,
     STEP_ORDER,
@@ -16,6 +17,7 @@ from yt_dbl.schemas import (
 from yt_dbl.utils.logging import (
     console,
     log_info,
+    log_memory_status,
     log_step_done,
     log_step_fail,
     log_step_skip,
@@ -82,6 +84,7 @@ class PipelineRunner:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self.model_manager = ModelManager(max_loaded=settings.max_loaded_models)
 
     def run(
         self,
@@ -92,6 +95,7 @@ class PipelineRunner:
         console.rule(f"[bold]yt-dbl — {state.url}[/bold]")
         log_info(f"Video ID: {state.video_id}")
         log_info(f"Target language: {state.target_language}")
+        log_info(f"Max models in memory: {self.model_manager.max_loaded}")
         log_info(f"Work dir: {self.settings.job_dir(state.video_id)}")
         console.print()
 
@@ -133,13 +137,21 @@ class PipelineRunner:
         else:
             console.rule("[bold yellow]Incomplete[/bold yellow]")
 
+        # Free all models at the end of pipeline
+        self.model_manager.unload_all()
+        log_memory_status()
+
         return state
 
     def _run_step(self, step_name: StepName, state: PipelineState) -> PipelineState:
         """Run a single pipeline step with timing and checkpointing."""
         step_dir = self.settings.step_dir(state.video_id, STEP_DIRS[step_name])
         step_cls = STEP_CLASSES[step_name]
-        step = step_cls(settings=self.settings, work_dir=step_dir)
+        step = step_cls(
+            settings=self.settings,
+            work_dir=step_dir,
+            model_manager=self.model_manager,
+        )
 
         result = state.get_step(step_name)
         result.status = StepStatus.RUNNING
