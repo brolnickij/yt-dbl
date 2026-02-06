@@ -12,8 +12,18 @@ __all__ = ["Settings", "settings"]
 
 
 # RAM thresholds for auto-detecting max_loaded_models
-_RAM_TIER_HIGH_GB = 32  # 32+ GB -> 3 models
-_RAM_TIER_MID_GB = 17  # 17-31 GB -> 2 models
+_RAM_TIER_VERY_HIGH_GB = 48  # 48+ GB -> batch_size 8
+_RAM_TIER_HIGH_GB = 32  # 32+ GB -> 3 models / batch_size 4
+_RAM_TIER_MID_GB = 17  # 17-31 GB -> 2 models / batch_size 2
+
+
+def _get_total_ram_gb() -> float:
+    """Return total system RAM in GiB (0.0 on failure)."""
+    try:
+        total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+        return total / (1024**3)
+    except (ValueError, OSError, AttributeError):
+        return _macos_ram_gb()
 
 
 def _detect_max_models() -> int:
@@ -24,17 +34,31 @@ def _detect_max_models() -> int:
       - 17-31 GB:      2
       - 32 GB+:        3
     """
-    try:
-        total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
-        total_gb = total / (1024**3)
-    except (ValueError, OSError, AttributeError):
-        # Fallback for macOS where sysconf may not work for PHYS_PAGES
-        total_gb = _macos_ram_gb()
-        if total_gb == 0:
-            return 1
-
+    total_gb = _get_total_ram_gb()
+    if total_gb == 0:
+        return 1
     if total_gb >= _RAM_TIER_HIGH_GB:
         return 3
+    if total_gb >= _RAM_TIER_MID_GB:
+        return 2
+    return 1
+
+
+def _detect_separation_batch_size() -> int:
+    """Auto-detect separation batch size based on system RAM.
+
+    Larger batches utilise GPU better during source separation but need
+    more memory.  Heuristic:
+      - 16 GB or less: 1
+      - 17-31 GB:      2
+      - 32-47 GB:      4
+      - 48 GB+:        8
+    """
+    total_gb = _get_total_ram_gb()
+    if total_gb >= _RAM_TIER_VERY_HIGH_GB:
+        return 8
+    if total_gb >= _RAM_TIER_HIGH_GB:
+        return 4
     if total_gb >= _RAM_TIER_MID_GB:
         return 2
     return 1
@@ -92,7 +116,7 @@ class Settings(BaseSettings):
     separation_model: str = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
     separation_segment_size: int = Field(default=256, ge=64, le=512)
     separation_overlap: int = Field(default=8, ge=2, le=50)
-    separation_batch_size: int = Field(default=1, ge=1, le=16)
+    separation_batch_size: int = Field(default=0, ge=0, le=16)  # 0 = auto-detect
 
     # ── Transcription ───────────────────────────────────────────────────────
     transcription_asr_model: str = "mlx-community/VibeVoice-ASR-bf16"
@@ -104,10 +128,12 @@ class Settings(BaseSettings):
     max_loaded_models: int = Field(default=0, ge=0)  # 0 = auto-detect
 
     @model_validator(mode="after")
-    def _auto_detect_max_models(self) -> Settings:
-        """Replace 0 (auto) with a value based on system RAM."""
+    def _auto_detect_from_ram(self) -> Settings:
+        """Replace 0 (auto) fields with values based on system RAM."""
         if self.max_loaded_models == 0:
             object.__setattr__(self, "max_loaded_models", _detect_max_models())
+        if self.separation_batch_size == 0:
+            object.__setattr__(self, "separation_batch_size", _detect_separation_batch_size())
         return self
 
     # ── Paths ───────────────────────────────────────────────────────────────
