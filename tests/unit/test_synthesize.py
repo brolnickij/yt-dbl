@@ -324,7 +324,10 @@ class TestSynthesisConfig:
         cfg = Settings(_env_file=None)  # type: ignore[call-arg]
         assert cfg.tts_model == "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
         assert cfg.tts_sample_rate == 12000
-        assert cfg.tts_temperature == 0.9
+        assert cfg.tts_temperature == 0.6
+        assert cfg.tts_top_k == 20
+        assert cfg.tts_top_p == 0.8
+        assert cfg.tts_repetition_penalty == 1.05
 
     def test_custom_model_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("YT_DBL_TTS_MODEL", "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16")
@@ -347,3 +350,41 @@ class TestSpeakerById:
         s = step._speaker_by_id(state, "SPEAKER_99")
         assert s.id == "SPEAKER_99"
         assert s.total_duration == 0.0
+
+
+# ── TTS speed estimation tests ───────────────────────────────────────────────
+
+
+class TestTTSSpeedEstimation:
+    def test_speaking_rate_estimation(self, tmp_path: Path) -> None:
+        step, _, state = _make_step(tmp_path)
+        rate = step._estimate_speaking_rate(state)
+        # 3 segments total chars / total duration
+        total_chars = sum(len(s.translated_text) for s in state.segments)
+        total_dur = sum(s.duration for s in state.segments)
+        assert abs(rate - total_chars / total_dur) < 0.01
+
+    def test_speaking_rate_empty(self, tmp_path: Path) -> None:
+        step, _, state = _make_step(tmp_path)
+        state.segments = []
+        rate = step._estimate_speaking_rate(state)
+        assert rate == 15.0  # fallback default
+
+    def test_tts_speed_fits_duration(self) -> None:
+        # 100 chars, 5s original, 20 chars/sec rate => estimated 5s => speed 1.0
+        speed = SynthesizeStep._estimate_tts_speed("x" * 100, 5.0, 20.0)
+        assert speed == 1.0
+
+    def test_tts_speed_needs_speedup(self) -> None:
+        # 200 chars, 5s original, 20 chars/sec rate => estimated 10s => speed 2.0
+        speed = SynthesizeStep._estimate_tts_speed("x" * 200, 5.0, 20.0)
+        assert abs(speed - 2.0) < 0.01
+
+    def test_tts_speed_clamped(self) -> None:
+        # 500 chars, 5s original, 20 chars/sec rate => estimated 25s => speed 5.0, clamped to 2.0
+        speed = SynthesizeStep._estimate_tts_speed("x" * 500, 5.0, 20.0)
+        assert speed == 2.0
+
+    def test_tts_speed_zero_duration(self) -> None:
+        speed = SynthesizeStep._estimate_tts_speed("some text", 0.0, 20.0)
+        assert speed == 1.0

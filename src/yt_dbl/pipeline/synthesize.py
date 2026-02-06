@@ -245,6 +245,10 @@ class SynthesizeStep(PipelineStep):
         lang = _TTS_LANG_MAP.get(state.target_language, "auto")
         total = len(state.segments)
 
+        # Estimate expected speaking rate (chars/sec) from original audio
+        # to pre-calculate TTS speed factor and avoid post-hoc atempo
+        avg_chars_per_sec = self._estimate_speaking_rate(state)
+
         progress = create_progress()
         try:
             with progress:
@@ -261,7 +265,10 @@ class SynthesizeStep(PipelineStep):
                     spk = self._speaker_by_id(state, seg.speaker)
                     ref_text = _find_ref_text_for_speaker(state.segments, spk)
 
-                    audio = self._run_tts(model, text, ref_path, ref_text, lang)
+                    # Pre-calculate TTS speed to fit into the original duration
+                    tts_speed = self._estimate_tts_speed(text, seg.duration, avg_chars_per_sec)
+
+                    audio = self._run_tts(model, text, ref_path, ref_text, lang, speed=tts_speed)
                     self._save_wav(audio, raw_path, self.settings.tts_sample_rate)
                     seg.synth_path = raw_path.name
                     progress.advance(task)
@@ -312,6 +319,40 @@ class SynthesizeStep(PipelineStep):
 
     # ── TTS model ───────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _estimate_speaking_rate(state: PipelineState) -> float:
+        """Estimate average characters-per-second from original segments."""
+        total_chars = 0
+        total_dur = 0.0
+        for seg in state.segments:
+            text = seg.translated_text or seg.text
+            total_chars += len(text)
+            total_dur += seg.duration
+        if total_dur <= 0:
+            return 15.0  # sensible default for Russian
+        return total_chars / total_dur
+
+    @staticmethod
+    def _estimate_tts_speed(
+        text: str,
+        original_duration: float,
+        avg_chars_per_sec: float,
+    ) -> float:
+        """Estimate TTS speed multiplier to fit translated text into original duration.
+
+        Qwen3-TTS 'speed' param range: 0.5-2.0.
+        """
+        if original_duration <= 0 or not text:
+            return 1.0
+        # Estimated duration at speed=1.0 based on average char rate
+        estimated_dur = len(text) / avg_chars_per_sec
+        ratio = estimated_dur / original_duration
+        if ratio <= 1.0:
+            return 1.0
+        # Clamp to TTS-native max speed (2.0)
+        _max_tts_speed = 2.0
+        return min(ratio, _max_tts_speed)
+
     def _load_tts_model(self) -> Any:
         """Load Qwen3-TTS model via mlx-audio."""
         from mlx_audio.tts.utils import load_model
@@ -328,6 +369,8 @@ class SynthesizeStep(PipelineStep):
         ref_audio: Path | None,
         ref_text: str,
         lang: str,
+        *,
+        speed: float = 1.0,
     ) -> Any:
         """Generate speech audio via Qwen3-TTS with voice cloning."""
         import mlx.core as mx
@@ -335,8 +378,13 @@ class SynthesizeStep(PipelineStep):
         kwargs: dict[str, Any] = {
             "text": text,
             "temperature": self.settings.tts_temperature,
+            "top_k": self.settings.tts_top_k,
+            "top_p": self.settings.tts_top_p,
+            "repetition_penalty": self.settings.tts_repetition_penalty,
             "lang_code": lang,
         }
+        if speed > 1.01:  # noqa: PLR2004
+            kwargs["speed"] = round(speed, 2)
         if ref_audio is not None and ref_audio.exists():
             kwargs["ref_audio"] = str(ref_audio)
             if ref_text:
