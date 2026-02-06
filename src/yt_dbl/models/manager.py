@@ -13,7 +13,6 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
-from yt_dbl.config import settings
 from yt_dbl.utils.logging import get_metal_memory_mb, log_info, log_model_load, log_model_unload
 
 __all__ = ["ModelManager"]
@@ -51,8 +50,8 @@ class ModelManager:
         manager.unload_all()
     """
 
-    def __init__(self, max_loaded: int | None = None) -> None:
-        self.max_loaded = max_loaded or settings.max_loaded_models
+    def __init__(self, max_loaded: int = 2) -> None:
+        self.max_loaded = max_loaded
         self._models: OrderedDict[str, LoadedModel] = OrderedDict()
         self._loaders: dict[str, tuple[Any, Any]] = {}  # name → (load_fn, unload_fn)
 

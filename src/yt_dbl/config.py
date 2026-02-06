@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__all__ = ["Settings", "settings"]
+__all__ = ["Settings"]
 
 
 # RAM thresholds for auto-detecting max_loaded_models
@@ -167,7 +167,3 @@ class Settings(BaseSettings):
         d = self.job_dir(video_id) / step_dirname
         d.mkdir(parents=True, exist_ok=True)
         return d
-
-
-# Singleton — importable from anywhere
-settings = Settings()

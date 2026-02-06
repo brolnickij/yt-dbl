@@ -9,7 +9,7 @@ import typer
 from rich.table import Table
 
 from yt_dbl import __version__
-from yt_dbl.config import Settings, settings
+from yt_dbl.config import Settings
 from yt_dbl.schemas import STEP_ORDER, PipelineState, StepName, StepStatus
 from yt_dbl.utils.logging import console
 
@@ -43,9 +43,8 @@ def _extract_video_id(url: str) -> str:
 def _make_settings(**overrides: object) -> Settings:
     """Create Settings with CLI overrides applied."""
     override_dict = {k: v for k, v in overrides.items() if v is not None}
-    if override_dict:
-        return settings.model_copy(update=override_dict)
-    return settings
+    base = Settings()
+    return base.model_copy(update=override_dict) if override_dict else base
 
 
 def _step_name_from_str(step_str: str) -> StepName:
@@ -151,7 +150,8 @@ def status(
     """Show the status of a dubbing job."""
     from yt_dbl.pipeline.runner import load_state
 
-    state = load_state(settings, video_id)
+    cfg = Settings()
+    state = load_state(cfg, video_id)
     if state is None:
         console.print(f"[error]No job found for video ID: {video_id}[/error]")
         raise typer.Exit(1)
@@ -220,11 +220,12 @@ def models_list() -> None:
         table.add_row(info.repo_id.split("/")[-1], info.purpose, status_str, size_str)
 
     # Separator model (non-HF)
-    sep_downloaded = check_separator_downloaded(settings.model_cache_dir)
+    cfg = Settings()
+    sep_downloaded = check_separator_downloaded(cfg.model_cache_dir)
     sep_status = "[green]✓ downloaded[/green]" if sep_downloaded else "[dim]not downloaded[/dim]"
     sep_size = ""
     if sep_downloaded:
-        sep_path = settings.model_cache_dir / SEPARATOR_MODEL
+        sep_path = cfg.model_cache_dir / SEPARATOR_MODEL
         sep_bytes = sep_path.stat().st_size
         total_size += sep_bytes
         sep_size = format_model_size(sep_bytes)

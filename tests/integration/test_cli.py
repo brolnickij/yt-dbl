@@ -211,8 +211,7 @@ class TestResumeCommand:
 
 
 class TestStatusCommand:
-    @patch("yt_dbl.cli.settings")
-    def test_status_shows_table(self, mock_settings: MagicMock, tmp_path: Path) -> None:
+    def test_status_shows_table(self, tmp_path: Path) -> None:
         from yt_dbl.schemas import VideoMeta
 
         state = PipelineState(
@@ -231,7 +230,6 @@ class TestStatusCommand:
         state_file = job_dir / "state.json"
         state_file.write_text(state.model_dump_json(indent=2))
 
-        mock_settings.job_dir.return_value = job_dir
         # Make load_state find it
         with patch("yt_dbl.pipeline.runner.load_state", return_value=state):
             result = runner.invoke(app, ["status", "test123"])
