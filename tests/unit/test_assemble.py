@@ -227,7 +227,7 @@ class TestBuildSpeechTrack:
         assert abs(track[sr - 1]) < 0.01
 
     def test_skips_missing_segments(self, tmp_path: Path) -> None:
-        """Segments with no synth_path or missing files are skipped."""
+        """Segments with no synth_path or missing files are skipped with a warning."""
         segments = [
             Segment(id=0, text="A", start=0.0, end=1.0, synth_path=""),
             Segment(id=1, text="B", start=2.0, end=3.0, synth_path="missing.wav"),
@@ -236,9 +236,18 @@ class TestBuildSpeechTrack:
         synth_dir.mkdir()
 
         output = tmp_path / "speech.pcm"
-        _build_speech_track(segments, synth_dir, output, total_duration=5.0)
+        with patch("yt_dbl.pipeline.assemble.log_warning") as mock_warn:
+            _build_speech_track(segments, synth_dir, output, total_duration=5.0)
+
         track = np.fromfile(str(output), dtype=np.float32)
         assert np.all(track == 0.0)
+
+        # Both segments should be reported as missing
+        mock_warn.assert_called_once()
+        warn_msg = mock_warn.call_args[0][0]
+        assert "2 segment(s) missing" in warn_msg
+        assert "0" in warn_msg
+        assert "1" in warn_msg
 
     def test_clips_to_total_duration(self, tmp_path: Path) -> None:
         """Segments extending past total_duration are clipped."""

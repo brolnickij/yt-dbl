@@ -35,15 +35,20 @@ def _collect_segment_entries(
     """Collect ``(start_sample, end_sample, path)`` from valid segments.
 
     Only reads WAV headers (``sf.info``) — no audio data is loaded.
+    Logs a warning listing IDs of any segments that are skipped (no
+    synthesis output or missing file).
     """
     import soundfile as sf
 
     entries: list[tuple[int, int, Path]] = []
+    skipped: list[int] = []
     for seg in segments:
         if not seg.synth_path:
+            skipped.append(seg.id)
             continue
         wav_path = synth_dir / seg.synth_path
         if not wav_path.exists():
+            skipped.append(seg.id)
             continue
         info = sf.info(str(wav_path))
         n_frames = info.frames
@@ -51,6 +56,9 @@ def _collect_segment_entries(
             n_frames = int(n_frames * sample_rate / info.samplerate)
         start_sample = int(seg.start * sample_rate)
         entries.append((start_sample, start_sample + n_frames, wav_path))
+
+    if skipped:
+        log_warning(f"{len(skipped)} segment(s) missing from speech track: {skipped}")
 
     entries.sort()
     return entries
