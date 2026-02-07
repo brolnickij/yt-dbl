@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v1.6.3 (2026-02-07)
+
+### Bug Fixes
+
+- **transcribe,audio**: Reject zero-duration segments, free chunk buffer, handle empty postprocess
+  output
+  ([`e8c828c`](https://github.com/brolnickij/yt-dbl/commit/e8c828cb1246ba641098646318a021094d99e8ae))
+
+### Chores
+
+- Bump uv.lock
+  ([`114530f`](https://github.com/brolnickij/yt-dbl/commit/114530ffb7ecdb3ecd21f5938c1d2bc5e0c8aa0b))
+
+### Documentation
+
+- Clarify Apple Silicon support & remove early stage warning
+  ([`89fc332`](https://github.com/brolnickij/yt-dbl/commit/89fc33278717301e9c4f8413c336eb489c6f8d12))
+
+
 ## v1.6.2 (2026-02-07)
 
 ### Bug Fixes
