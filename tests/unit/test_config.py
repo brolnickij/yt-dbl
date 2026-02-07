@@ -104,6 +104,14 @@ class TestSettings:
         )
         assert s.transcription_chunk_overlap_minutes < s.transcription_max_chunk_minutes
 
+    def test_invalid_output_format(self) -> None:
+        with pytest.raises(ValueError, match="Input should be 'mp4' or 'mkv'"):
+            Settings(output_format="avi")  # type: ignore[arg-type]
+
+    def test_invalid_subtitle_mode(self) -> None:
+        with pytest.raises(ValueError, match="Input should be"):
+            Settings(subtitle_mode="embed")  # type: ignore[arg-type]
+
 
 # ── RAM-based auto-detection ────────────────────────────────────────────────
 

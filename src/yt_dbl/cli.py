@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 from typing import Annotated
 
+import click
 import typer
 from rich.table import Table
 
@@ -112,10 +113,19 @@ def dub(
     no_subs: Annotated[bool, typer.Option("--no-subs", help="Disable subtitles")] = False,
     sub_mode: Annotated[
         str | None,
-        typer.Option("--sub-mode", help="Subtitle mode (softsub/hardsub/none)"),
+        typer.Option(
+            "--sub-mode",
+            help="Subtitle mode",
+            click_type=click.Choice(["softsub", "hardsub", "none"]),
+        ),
     ] = None,
     output_format: Annotated[
-        str | None, typer.Option("--format", help="Output format (mp4/mkv)")
+        str | None,
+        typer.Option(
+            "--format",
+            help="Output format",
+            click_type=click.Choice(["mp4", "mkv"]),
+        ),
     ] = None,
     output_dir: _OutputDir = None,
 ) -> None:

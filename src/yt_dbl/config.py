@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -103,8 +104,8 @@ class Settings(BaseSettings):
 
     # ── Pipeline ────────────────────────────────────────────────────────────
     target_language: str = "ru"
-    output_format: str = "mp4"  # mp4 | mkv
-    subtitle_mode: str = "softsub"  # softsub | hardsub | none
+    output_format: Literal["mp4", "mkv"] = "mp4"
+    subtitle_mode: Literal["softsub", "hardsub", "none"] = "softsub"
 
     # ── Audio ───────────────────────────────────────────────────────────────
     background_volume: float = Field(default=0.15, ge=0.0, le=1.0)

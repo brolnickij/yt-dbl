@@ -113,6 +113,22 @@ class TestStepNameFromStr:
 class TestDubCommand:
     """Integration tests for the `dub` command (mocked pipeline)."""
 
+    def test_dub_invalid_format_rejected(self) -> None:
+        """--format with an unsupported value is rejected before pipeline runs."""
+        result = runner.invoke(
+            app,
+            ["dub", "https://youtube.com/watch?v=dQw4w9WgXcQ", "--format", "avi"],
+        )
+        assert result.exit_code != 0
+
+    def test_dub_invalid_sub_mode_rejected(self) -> None:
+        """--sub-mode with an unsupported value is rejected before pipeline runs."""
+        result = runner.invoke(
+            app,
+            ["dub", "https://youtube.com/watch?v=dQw4w9WgXcQ", "--sub-mode", "embed"],
+        )
+        assert result.exit_code != 0
+
     @patch("yt_dbl.pipeline.runner.PipelineRunner")
     @patch("yt_dbl.pipeline.runner.save_state")
     @patch("yt_dbl.pipeline.runner.load_state", return_value=None)
