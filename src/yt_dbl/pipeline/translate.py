@@ -322,6 +322,17 @@ class TranslateStep(PipelineStep):
                 f"{response.usage.output_tokens} out tokens"
             )
 
+            # Detect token-limit truncation — retrying won't help because
+            # the same input will produce the same truncated output.
+            if getattr(response, "stop_reason", None) == "max_tokens":
+                raise TranslationError(
+                    f"Claude output was truncated at "
+                    f"{self.settings.translation_max_tokens} max_tokens "
+                    f"(batch: {len(segments)} segments). "
+                    "Increase YT_DBL_TRANSLATION_MAX_TOKENS or decrease "
+                    "YT_DBL_TRANSLATION_BATCH_SIZE."
+                )
+
             try:
                 return _parse_translations(response_text)
             except (json.JSONDecodeError, TranslationError, KeyError, ValueError) as exc:

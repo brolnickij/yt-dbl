@@ -437,6 +437,33 @@ class TestTranslateAPIErrors:
         assert mock_client.messages.stream.call_count == 2
         assert state.segments[0].translated_text == "A"
 
+    def test_max_tokens_truncation_raises_immediately(self, tmp_path: Path) -> None:
+        """If Claude hits max_tokens limit, TranslationError is raised without retries."""
+        step, _, state = _make_step(tmp_path)
+
+        content_block = MagicMock()
+        content_block.text = '[{"id": 0, "translated_text": "Trun'  # truncated JSON
+        response = MagicMock()
+        response.content = [content_block]
+        response.usage = MagicMock(input_tokens=500, output_tokens=32768)
+        response.stop_reason = "max_tokens"
+
+        stream = MagicMock()
+        stream.get_final_message.return_value = response
+        stream.__enter__ = MagicMock(return_value=stream)
+        stream.__exit__ = MagicMock(return_value=False)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.return_value = stream
+            mock_cls.return_value = mock_client
+
+            with pytest.raises(TranslationError, match="truncated"):
+                step.run(state)
+
+        # Only 1 API call — no retries for truncation
+        assert mock_client.messages.stream.call_count == 1
+
 
 # ── Config tests ────────────────────────────────────────────────────────────
 
