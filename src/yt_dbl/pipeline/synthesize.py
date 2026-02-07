@@ -116,27 +116,45 @@ class SynthesizeStep(PipelineStep):
         state: PipelineState,
         vocals_path: Path,
     ) -> dict[str, Path]:
-        """Extract voice reference WAV for each speaker."""
+        """Extract voice reference WAV for each speaker.
+
+        Each reference is an independent ffmpeg call (cut + filter).
+        When multiple speakers need extraction, calls run in parallel
+        via a thread pool — the GIL is released during subprocess I/O.
+        """
         refs: dict[str, Path] = {}
+        to_extract: list[Speaker] = []
+
         for speaker in state.speakers:
             ref_path = self.step_dir / f"ref_{speaker.id}.wav"
             if ref_path.exists():
                 refs[speaker.id] = ref_path
-                continue
+            else:
+                to_extract.append(speaker)
 
+        if not to_extract:
+            return refs
+
+        def _do_extract(speaker: Speaker) -> tuple[Speaker, Path]:
+            ref_path = self.step_dir / f"ref_{speaker.id}.wav"
             extract_voice_reference(
                 vocals_path,
                 speaker,
                 ref_path,
                 target_duration=self.settings.voice_ref_duration,
             )
-            speaker.reference_path = ref_path.name
-            refs[speaker.id] = ref_path
-            log_info(
-                f"  {speaker.id}: "
-                f"{speaker.reference_start:.1f}-{speaker.reference_end:.1f}s "
-                f"-> {ref_path.name}"
-            )
+            return speaker, ref_path
+
+        max_workers = min(os.cpu_count() or 1, len(to_extract))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            for speaker, ref_path in pool.map(_do_extract, to_extract):
+                speaker.reference_path = ref_path.name
+                refs[speaker.id] = ref_path
+                log_info(
+                    f"  {speaker.id}: "
+                    f"{speaker.reference_start:.1f}-{speaker.reference_end:.1f}s "
+                    f"-> {ref_path.name}"
+                )
         return refs
 
     def _synthesize_segments(
