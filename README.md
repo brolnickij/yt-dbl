@@ -178,7 +178,7 @@ yt-dbl models download    # pre-download all models
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  2. SEPARATE                                                                    │
 │                                                                                 │
-│  BS-RoFormer splits audio into vocals and background (ONNX + CoreML)            │
+│  BS-RoFormer splits audio into vocals and background (PyTorch MPS)               │
 │  Output: vocals.wav, background.wav                                             │
 └───────────────────────────┬────────────────────────────────────────────┬────────┘
                             │                                            │
@@ -201,7 +201,7 @@ yt-dbl models download    # pre-download all models
 ┌──────────────────────────────────────────────────────┐                 │
 │  4. TRANSLATE                                        │                 │
 │                                                      │                 │
-│  Claude API (single-pass, all segments at once)      │                 │
+│  Claude API (auto-batched by token budget)            │                 │
 │  TTS-friendly output: short phrases, spelled-out     │                 │
 │  numbers, no special characters                      │                 │
 │                                                      │                 │
