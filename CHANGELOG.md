@@ -1,6 +1,45 @@
 # CHANGELOG
 
 
+## v1.6.2 (2026-02-07)
+
+### Bug Fixes
+
+- **assemble**: Stream speech track in chunks to avoid OOM and WAV 4GB limit
+  ([`87752f8`](https://github.com/brolnickij/yt-dbl/commit/87752f862363a7d3722599a373255312039f1323))
+
+- **assemble**: Warn about segments missing from speech track
+  ([`a848f8f`](https://github.com/brolnickij/yt-dbl/commit/a848f8f6df6bc2ca5af91c1ad8c4bdd9ad95eef6))
+
+- **audio**: Add timeout support to ffmpeg and ffprobe subprocesses
+  ([`683a5b4`](https://github.com/brolnickij/yt-dbl/commit/683a5b43e4c98efb22970dbc442b8373ce40dfcb))
+
+- **runner**: Unload all models before assembly to free GPU memory
+  ([`7a95459`](https://github.com/brolnickij/yt-dbl/commit/7a9545905f97bef4d8b3126291e1218d0765161c))
+
+- **transcribe**: Prevent infinite loop when chunk overlap >= chunk duration
+  ([`2cea80a`](https://github.com/brolnickij/yt-dbl/commit/2cea80a04131fdbcc19c989ab699e8173a520460))
+
+- **translate**: Detect max_tokens truncation and fail fast with actionable message
+  ([`c748514`](https://github.com/brolnickij/yt-dbl/commit/c748514a5cdfbdc3106955f2b6e5ebaf58420cda))
+
+- **translate**: Invalidate stale translation caches via segment fingerprint
+  ([`efd7cd6`](https://github.com/brolnickij/yt-dbl/commit/efd7cd657756009403f8517cc01abe27c91ee864))
+
+### Chores
+
+- Bump uv.lock
+  ([`9a7116b`](https://github.com/brolnickij/yt-dbl/commit/9a7116b5a45c4606e138f4e6d24744ea713160f1))
+
+- Bump uv.lock
+  ([`3650aba`](https://github.com/brolnickij/yt-dbl/commit/3650abab9865918a61ecb99d4dc11150c6374c3d))
+
+### Performance Improvements
+
+- **synthesize**: Flush Metal cache periodically between TTS segments
+  ([`1b4735c`](https://github.com/brolnickij/yt-dbl/commit/1b4735c6ac215f84d8953a2a631289cd59a081fa))
+
+
 ## v1.6.1 (2026-02-07)
 
 ### Bug Fixes
