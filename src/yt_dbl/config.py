@@ -151,6 +151,22 @@ class Settings(BaseSettings):
             object.__setattr__(self, "separation_batch_size", _detect_separation_batch_size())
         return self
 
+    @model_validator(mode="after")
+    def _validate_chunk_overlap(self) -> Settings:
+        """Ensure transcription chunk overlap is strictly less than chunk size.
+
+        When ``overlap >= chunk`` the chunked-ASR loop step becomes zero or
+        negative, causing an infinite loop in ``_compute_chunk_boundaries``.
+        """
+        if self.transcription_chunk_overlap_minutes >= self.transcription_max_chunk_minutes:
+            msg = (
+                f"transcription_chunk_overlap_minutes "
+                f"({self.transcription_chunk_overlap_minutes}) must be less than "
+                f"transcription_max_chunk_minutes ({self.transcription_max_chunk_minutes})"
+            )
+            raise ValueError(msg)
+        return self
+
     # ── Paths ───────────────────────────────────────────────────────────────
     work_dir: Path = Path("dubbed")
     model_cache_dir: Path = Field(

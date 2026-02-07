@@ -81,6 +81,29 @@ class TestSettings:
         with pytest.raises(ValueError, match="less than or equal to 30"):
             Settings(voice_ref_duration=60.0)
 
+    def test_chunk_overlap_exceeds_chunk_raises(self) -> None:
+        """overlap >= chunk causes infinite loop in chunked ASR — must reject."""
+        with pytest.raises(ValueError, match="must be less than"):
+            Settings(
+                transcription_max_chunk_minutes=5.0,
+                transcription_chunk_overlap_minutes=10.0,
+            )
+
+    def test_chunk_overlap_equals_chunk_raises(self) -> None:
+        """overlap == chunk also produces zero step — must reject."""
+        with pytest.raises(ValueError, match="must be less than"):
+            Settings(
+                transcription_max_chunk_minutes=5.0,
+                transcription_chunk_overlap_minutes=5.0,
+            )
+
+    def test_chunk_overlap_less_than_chunk_ok(self) -> None:
+        s = Settings(
+            transcription_max_chunk_minutes=30.0,
+            transcription_chunk_overlap_minutes=2.0,
+        )
+        assert s.transcription_chunk_overlap_minutes < s.transcription_max_chunk_minutes
+
 
 # ── RAM-based auto-detection ────────────────────────────────────────────────
 

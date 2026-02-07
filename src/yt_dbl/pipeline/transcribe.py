@@ -436,15 +436,30 @@ class TranscribeStep(PipelineStep):
         max_chunk_sec: float,
         overlap_sec: float,
     ) -> list[tuple[float, float]]:
-        """Return ``(start, end)`` pairs for overlapping audio chunks."""
+        """Return ``(start, end)`` pairs for overlapping audio chunks.
+
+        Raises
+        ------
+        TranscriptionError
+            If ``overlap_sec >= max_chunk_sec`` (would cause zero/negative
+            step and an infinite loop).
+        """
+        if overlap_sec >= max_chunk_sec:
+            msg = (
+                f"Chunk overlap ({overlap_sec}s) must be less than "
+                f"chunk duration ({max_chunk_sec}s)"
+            )
+            raise TranscriptionError(msg)
+
         boundaries: list[tuple[float, float]] = []
         chunk_start = 0.0
+        step_sec = max_chunk_sec - overlap_sec
         while chunk_start < duration_sec:
             chunk_end = min(chunk_start + max_chunk_sec, duration_sec)
             boundaries.append((chunk_start, chunk_end))
             if chunk_end >= duration_sec:
                 break
-            chunk_start += max_chunk_sec - overlap_sec
+            chunk_start += step_sec
         return boundaries
 
     def _transcribe_single_chunk(

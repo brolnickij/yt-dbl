@@ -846,6 +846,61 @@ class TestChunkingConfig:
         assert cfg.transcription_chunk_overlap_minutes == 3.0
 
 
+# ── Chunk boundary computation tests ────────────────────────────────────────
+
+
+class TestComputeChunkBoundaries:
+    """Tests for TranscribeStep._compute_chunk_boundaries."""
+
+    def test_single_chunk_when_short(self) -> None:
+        """Audio shorter than max_chunk → one boundary spanning all."""
+        # duration < max_chunk, but method is only called when duration > max_chunk
+        # in practice.  Still, verify it returns a single chunk.
+        result = TranscribeStep._compute_chunk_boundaries(300.0, 1800.0, 120.0)
+        assert result == [(0.0, 300.0)]
+
+    def test_two_overlapping_chunks(self) -> None:
+        # duration=3600, chunk=1800, overlap=120 → step=1680
+        # chunk 0: [0, 1800], chunk 1: [1680, 3480], chunk 2: [3360, 3600]
+        result = TranscribeStep._compute_chunk_boundaries(3600.0, 1800.0, 120.0)
+        assert len(result) == 3
+        assert result[0] == (0.0, 1800.0)
+        assert result[1] == (1680.0, 3480.0)
+        assert result[2] == (3360.0, 3600.0)
+
+    def test_three_chunks(self) -> None:
+        # duration=5000, chunk=1800, overlap=120 → step=1680
+        # chunk 0: [0, 1800], chunk 1: [1680, 3480], chunk 2: [3360, 5000]
+        result = TranscribeStep._compute_chunk_boundaries(5000.0, 1800.0, 120.0)
+        assert len(result) == 3
+        assert result[0] == (0.0, 1800.0)
+        assert result[1] == (1680.0, 3480.0)
+        assert result[2] == (3360.0, 5000.0)
+
+    def test_last_chunk_clamped_to_duration(self) -> None:
+        """The final chunk end is clamped to duration, not max_chunk beyond."""
+        result = TranscribeStep._compute_chunk_boundaries(2000.0, 1800.0, 120.0)
+        assert result[-1][1] == 2000.0
+
+    def test_overlap_equals_chunk_raises(self) -> None:
+        """overlap == chunk → zero step → infinite loop guard."""
+        with pytest.raises(TranscriptionError, match="must be less than"):
+            TranscribeStep._compute_chunk_boundaries(7200.0, 300.0, 300.0)
+
+    def test_overlap_exceeds_chunk_raises(self) -> None:
+        """overlap > chunk → negative step → infinite loop guard."""
+        with pytest.raises(TranscriptionError, match="must be less than"):
+            TranscribeStep._compute_chunk_boundaries(7200.0, 300.0, 600.0)
+
+    def test_small_step_produces_many_chunks(self) -> None:
+        """chunk=300, overlap=270 → step=30 → many chunks but finite."""
+        result = TranscribeStep._compute_chunk_boundaries(600.0, 300.0, 270.0)
+        # step=30, so: 0,30,60,...,300 → last chunk covers to 600
+        assert len(result) == 11
+        assert result[0] == (0.0, 300.0)
+        assert result[-1][1] == 600.0
+
+
 # ── Timestamp parsing tests ─────────────────────────────────────────────────
 
 
