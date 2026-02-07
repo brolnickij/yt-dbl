@@ -94,6 +94,25 @@ def _build_speech_track(
 
     entries = _collect_segment_entries(segments, synth_dir, sample_rate)
 
+    # Pre-load and prepare all segment audio once (read + resample + fade).
+    # This avoids re-reading WAVs for segments that span chunk boundaries.
+    seg_audio: dict[Path, np.ndarray] = {}
+    for _seg_start, _seg_end, wav_path in entries:
+        if wav_path in seg_audio:
+            continue
+        data, sr = sf.read(str(wav_path), dtype="float32")
+        if data.ndim > 1:
+            data = data.mean(axis=1)  # stereo → mono
+        if sr != sample_rate:
+            up = sample_rate // gcd(sample_rate, sr)
+            down = sr // gcd(sample_rate, sr)
+            data = resample_poly(data, up, down).astype(np.float32)
+        if fade_samples > 0 and len(data) > fade_samples * 2:
+            t = np.linspace(0.0, np.pi / 2, fade_samples, dtype=np.float32)
+            data[:fade_samples] *= np.sin(t)
+            data[-fade_samples:] *= np.cos(t)
+        seg_audio[wav_path] = data
+
     seg_ptr = 0
     samples_written = 0
 
@@ -114,22 +133,7 @@ def _build_speech_track(
                 if seg_end <= chunk_offset:
                     continue  # short segment between seg_ptr and a longer one
 
-                # Load segment audio
-                data, sr = sf.read(str(wav_path), dtype="float32")
-                if data.ndim > 1:
-                    data = data.mean(axis=1)  # stereo → mono
-
-                # Resample if needed (normally 48 kHz after loudnorm)
-                if sr != sample_rate:
-                    up = sample_rate // gcd(sample_rate, sr)
-                    down = sr // gcd(sample_rate, sr)
-                    data = resample_poly(data, up, down).astype(np.float32)
-
-                # Equal-power fade in/out (sin² curve keeps energy constant)
-                if fade_samples > 0 and len(data) > fade_samples * 2:
-                    t = np.linspace(0.0, np.pi / 2, fade_samples, dtype=np.float32)
-                    data[:fade_samples] *= np.sin(t)
-                    data[-fade_samples:] *= np.cos(t)
+                data = seg_audio[wav_path]
 
                 # Clip to total_samples boundary
                 if seg_start + len(data) > total_samples:
