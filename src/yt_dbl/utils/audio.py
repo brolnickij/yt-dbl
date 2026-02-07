@@ -57,17 +57,33 @@ def has_rubberband() -> bool:
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
     else:
         return "rubberband" in result.stdout
 
 
-def run_ffmpeg(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run an ffmpeg command and return the result."""
+def run_ffmpeg(
+    args: list[str],
+    check: bool = True,
+    timeout: float | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run an ffmpeg command and return the result.
+
+    Parameters
+    ----------
+    args
+        FFmpeg arguments (without the binary name).
+    check
+        Raise ``CalledProcessError`` on non-zero exit.
+    timeout
+        Maximum seconds to wait.  ``None`` means no limit.  When
+        exceeded, ``subprocess.TimeoutExpired`` is raised.
+    """
     cmd = [_detect_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", *args]
-    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+    return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=timeout)
 
 
 def extract_audio(
@@ -101,5 +117,6 @@ def get_audio_duration(path: Path) -> float:
         capture_output=True,
         text=True,
         check=True,
+        timeout=30,
     )
     return float(result.stdout.strip())

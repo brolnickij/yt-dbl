@@ -95,7 +95,20 @@ class TestRunFfmpeg:
         assert cmd[-3:] == ["-i", "in.mp4", "out.wav"]
         for flag in ("-y", "-hide_banner"):
             assert flag in cmd
-        assert mock_run.call_args[1] == {"capture_output": True, "text": True, "check": True}
+        assert mock_run.call_args[1] == {
+            "capture_output": True,
+            "text": True,
+            "check": True,
+            "timeout": None,
+        }
+
+    @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
+    @patch("subprocess.run")
+    def test_timeout_passed_through(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        run_ffmpeg(["-i", "in.mp4", "out.wav"], timeout=120.0)
+
+        assert mock_run.call_args[1]["timeout"] == 120.0
 
     @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
     @patch("subprocess.run")
@@ -152,6 +165,8 @@ class TestGetAudioDuration:
         )
         duration = get_audio_duration(tmp_path / "audio.wav")
         assert duration == pytest.approx(125.34)
+        # Verify 30s timeout is set
+        assert mock_run.call_args[1]["timeout"] == 30
 
     @patch("yt_dbl.utils.audio._detect_ffprobe", return_value="ffprobe")
     @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "ffprobe"))
@@ -160,3 +175,10 @@ class TestGetAudioDuration:
     ) -> None:
         with pytest.raises(subprocess.CalledProcessError):
             get_audio_duration(tmp_path / "missing.wav")
+
+
+class TestHasRubberbandTimeout:
+    @patch("yt_dbl.utils.audio._detect_ffmpeg", return_value="ffmpeg")
+    @patch("subprocess.run", side_effect=subprocess.TimeoutExpired("ffmpeg", 10))
+    def test_returns_false_on_timeout(self, mock_run: MagicMock, mock_detect: MagicMock) -> None:
+        assert has_rubberband() is False
