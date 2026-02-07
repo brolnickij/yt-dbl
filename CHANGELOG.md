@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v1.6.0 (2026-02-07)
+
+### Bug Fixes
+
+- **transcribe**: Update ASR configuration & enhance timestamp parsing
+  ([`2487d9d`](https://github.com/brolnickij/yt-dbl/commit/2487d9d98e2850e309104b507a86e7a76d21704f))
+
+### Chores
+
+- Bump uv.lock
+  ([`652ecfd`](https://github.com/brolnickij/yt-dbl/commit/652ecfd161e7a168aab852722427ec1ac6df0806))
+
+### Documentation
+
+- Add warning about stability for long videos
+  ([`e24828e`](https://github.com/brolnickij/yt-dbl/commit/e24828e0ef1a5f480e770748c66da06a7e24baed))
+
+### Features
+
+- **translate**: Enhance translation process with caching & retry logic for Claude API
+  ([`deda737`](https://github.com/brolnickij/yt-dbl/commit/deda7378915c6f8f2eb5aa8dcd43a3a840cb6e10))
+
+
 ## v1.5.0 (2026-02-06)
 
 ### Bug Fixes
