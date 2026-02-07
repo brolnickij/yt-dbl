@@ -6,10 +6,7 @@ yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID" -t ru
 ```
 
 > [!WARNING]
-> **Early stage** — not yet stable for long videos (30+ min)
-
-> [!WARNING]
-> **Apple Silicon only** (M1–M4), tested on M4 Pro (48 GB)
+> **Apple Silicon ONLY** (M1–M4), tested on M4 Pro (48 GB)
 
 One command: download, transcribe, translate (Claude), clone each speaker's voice (Qwen3-TTS), mix with the original background — done. All ML inference runs locally on your Mac's GPU via [MLX](https://github.com/ml-explore/mlx)
 
