@@ -179,6 +179,12 @@ class PipelineRunner:
 
     def _run_step(self, step_name: StepName, state: PipelineState) -> PipelineState:
         """Run a single pipeline step with timing and checkpointing."""
+        # Free GPU memory before assembly — no ML models are needed and the
+        # speech-track builder benefits from the headroom (especially on
+        # 16 GB machines where the TTS model would otherwise remain loaded).
+        if step_name == StepName.ASSEMBLE:
+            self.model_manager.unload_all()
+
         step_dir = self.settings.step_dir(state.video_id, STEP_DIRS[step_name])
         step_cls = STEP_CLASSES[step_name]
         step = step_cls(

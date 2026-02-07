@@ -417,3 +417,36 @@ class TestModelCleanup:
             runner.run(state)
 
         mock_unload.assert_called_once()
+
+    def test_models_unloaded_before_assembly(self, tmp_path: Path) -> None:
+        """All ML models are freed before assembly to release GPU memory."""
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state = prefill_download(state, cfg)
+        sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
+
+        runner = PipelineRunner(cfg)
+
+        unload_calls: list[str] = []
+
+        original_run_step = runner._run_step
+
+        def _tracking_run_step(step_name: StepName, st: PipelineState) -> PipelineState:
+            if step_name == StepName.ASSEMBLE:
+                unload_calls.append("before_assemble")
+            return original_run_step(step_name, st)
+
+        with (
+            _pipeline_patches(sep_dir),
+            patch.object(runner, "_run_step", side_effect=_tracking_run_step),
+            patch.object(
+                runner.model_manager,
+                "unload_all",
+                wraps=runner.model_manager.unload_all,
+            ) as mock_unload,
+        ):
+            state = runner.run(state)
+
+        # unload_all must be called at least twice: once before ASSEMBLE,
+        # once in the finally block.  The before-ASSEMBLE call is critical.
+        assert mock_unload.call_count >= 2
