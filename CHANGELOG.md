@@ -1,6 +1,26 @@
 # CHANGELOG
 
 
+## v1.6.4 (2026-02-07)
+
+### Performance Improvements
+
+- **assemble**: Pre-load segment WAVs to avoid re-reading at chunk boundaries
+  ([`3964b3a`](https://github.com/brolnickij/yt-dbl/commit/3964b3a0d44f7a26e0a1623487f573591203e407))
+
+- **audio**: Use single-pass loudnorm for TTS postprocessing
+  ([`56d82f8`](https://github.com/brolnickij/yt-dbl/commit/56d82f881834f9692e23206b111cbb4d8ba91fbc))
+
+- **synthesize**: Parallelize voice reference extraction
+  ([`a853061`](https://github.com/brolnickij/yt-dbl/commit/a853061971b25e6127822d6e0defea1627432986))
+
+- **synthesize**: Replace ffprobe subprocess with soundfile.info for duration
+  ([`673d8c5`](https://github.com/brolnickij/yt-dbl/commit/673d8c5cb4f295b6dc6b7d7b9bd4abe8436a4a33))
+
+- **translate**: Parallelize multi-batch translation API calls
+  ([`764552f`](https://github.com/brolnickij/yt-dbl/commit/764552f1fa55842244ec36ea7e418b4943fced77))
+
+
 ## v1.6.3 (2026-02-07)
 
 ### Bug Fixes
