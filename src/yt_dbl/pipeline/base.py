@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from yt_dbl.config import Settings
@@ -107,6 +108,25 @@ class PipelineStep(ABC):
         step_result = state.get_step(step)
         step_dir = self.settings.step_dir(state.video_id, STEP_DIRS[step])
         return step_dir / step_result.outputs[output_key]
+
+    def _get_or_load_model(
+        self,
+        name: str,
+        loader: Callable[[], Any],
+    ) -> Any:
+        """Load a model via *ModelManager* (with LRU eviction) or directly.
+
+        When a ``model_manager`` is available the model is registered
+        (if not already) and retrieved through the manager so that LRU
+        eviction and memory tracking work automatically.  Otherwise the
+        *loader* is called directly — the caller is responsible for
+        freeing the returned object.
+        """
+        if self.model_manager is not None:
+            if name not in self.model_manager.registered_names:
+                self.model_manager.register(name, loader=loader)
+            return self.model_manager.get(name)
+        return loader()
 
     @property
     def step_dir(self) -> Path:

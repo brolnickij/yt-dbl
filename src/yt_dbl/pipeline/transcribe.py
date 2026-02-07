@@ -267,17 +267,10 @@ class TranscribeStep(PipelineStep):
         results are merged with speaker-ID reconciliation across chunks.
         """
         model_name = self.settings.transcription_asr_model
-
-        if self.model_manager is not None:
-            # Register loader if not yet registered
-            if model_name not in self.model_manager.registered_names:
-                self.model_manager.register(
-                    model_name,
-                    loader=lambda name=model_name: self._load_stt(name),  # type: ignore[misc]
-                )
-            model = self.model_manager.get(model_name)
-        else:
-            model = self._load_stt(model_name)
+        model = self._get_or_load_model(
+            model_name,
+            loader=lambda: self._load_stt(model_name),
+        )
 
         try:
             duration_sec = self._get_audio_duration_sec(vocals_path)
@@ -709,16 +702,10 @@ class TranscribeStep(PipelineStep):
         entire recording for every segment.
         """
         aligner_name = self.settings.transcription_aligner_model
-
-        if self.model_manager is not None:
-            if aligner_name not in self.model_manager.registered_names:
-                self.model_manager.register(
-                    aligner_name,
-                    loader=lambda name=aligner_name: self._load_stt(name),  # type: ignore[misc]
-                )
-            aligner = self.model_manager.get(aligner_name)
-        else:
-            aligner = self._load_stt(aligner_name)
+        aligner = self._get_or_load_model(
+            aligner_name,
+            loader=lambda: self._load_stt(aligner_name),
+        )
 
         lang_full = ALIGNER_LANGUAGE_MAP.get(detected_lang, "English")
 

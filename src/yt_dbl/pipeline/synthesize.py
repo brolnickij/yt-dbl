@@ -334,16 +334,10 @@ class SynthesizeStep(PipelineStep):
     def _load_tts_model(self) -> TTSModel:
         """Load Qwen3-TTS model via mlx-audio (through ModelManager if available)."""
         model_name = self.settings.tts_model
-
-        if self.model_manager is not None:
-            if model_name not in self.model_manager.registered_names:
-                self.model_manager.register(
-                    model_name,
-                    loader=lambda name=model_name: self._load_tts_raw(name),  # type: ignore[misc]
-                )
-            return self.model_manager.get(model_name)  # type: ignore[no-any-return]
-
-        return self._load_tts_raw(model_name)
+        return self._get_or_load_model(  # type: ignore[no-any-return]
+            model_name,
+            loader=lambda: self._load_tts_raw(model_name),
+        )
 
     @staticmethod
     def _load_tts_raw(model_name: str) -> TTSModel:
