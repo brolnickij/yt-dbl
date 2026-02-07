@@ -19,74 +19,126 @@ from yt_dbl.utils.logging import log_info, log_warning
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import numpy as np
-
-SPEECH_TRACK_FILE = "speech.wav"
+SPEECH_TRACK_FILE = "speech.pcm"
 CROSSFADE_MS = 50
+_SPEECH_CHUNK_SECONDS = 30
 
 
 # ── Speech track assembly ───────────────────────────────────────────────────
 
 
-def _build_speech_track(
+def _collect_segment_entries(
     segments: list[Segment],
     synth_dir: Path,
-    total_duration: float,
-    sample_rate: int = 48000,
-    crossfade_ms: int = CROSSFADE_MS,
-) -> np.ndarray:
-    """Place synthesized WAV segments onto a timeline at original timecodes.
+    sample_rate: int,
+) -> list[tuple[int, int, Path]]:
+    """Collect ``(start_sample, end_sample, path)`` from valid segments.
 
-    Each segment gets a short equal-power fade-in/fade-out to prevent
-    clicks at boundaries while maintaining constant energy.  Segments
-    that happen to overlap are additively mixed.
+    Only reads WAV headers (``sf.info``) — no audio data is loaded.
     """
-    import numpy as np
     import soundfile as sf
-    from scipy.signal import resample_poly
 
-    total_samples = int(total_duration * sample_rate) + sample_rate  # +1 s safety
-    track = np.zeros(total_samples, dtype=np.float32)
-    fade_samples = int(crossfade_ms / 1000 * sample_rate)
-
+    entries: list[tuple[int, int, Path]] = []
     for seg in segments:
         if not seg.synth_path:
             continue
         wav_path = synth_dir / seg.synth_path
         if not wav_path.exists():
             continue
-
-        data, sr = sf.read(str(wav_path), dtype="float32")
-        if data.ndim > 1:
-            data = data.mean(axis=1)  # stereo → mono
-
-        # Resample if needed (normally 48 kHz after loudnorm)
-        if sr != sample_rate:
-            up = sample_rate // gcd(sample_rate, sr)
-            down = sr // gcd(sample_rate, sr)
-            data = resample_poly(data, up, down).astype(np.float32)
-
-        # Equal-power fade in/out (sin² curve keeps energy constant)
-        if fade_samples > 0 and len(data) > fade_samples * 2:
-            t = np.linspace(0.0, np.pi / 2, fade_samples, dtype=np.float32)
-            fade_in = np.sin(t)
-            fade_out = np.cos(t)
-            data[:fade_samples] *= fade_in
-            data[-fade_samples:] *= fade_out
-
-        # Place at timecode
+        info = sf.info(str(wav_path))
+        n_frames = info.frames
+        if info.samplerate != sample_rate:
+            n_frames = int(n_frames * sample_rate / info.samplerate)
         start_sample = int(seg.start * sample_rate)
-        end_sample = start_sample + len(data)
+        entries.append((start_sample, start_sample + n_frames, wav_path))
 
-        if start_sample >= total_samples:
-            continue
-        if end_sample > total_samples:
-            data = data[: total_samples - start_sample]
-            end_sample = total_samples
+    entries.sort()
+    return entries
 
-        track[start_sample:end_sample] += data
 
-    return track
+def _build_speech_track(
+    segments: list[Segment],
+    synth_dir: Path,
+    output_path: Path,
+    total_duration: float,
+    sample_rate: int = 48000,
+    crossfade_ms: int = CROSSFADE_MS,
+) -> int:
+    """Build a continuous speech track by streaming chunks to raw PCM.
+
+    Instead of allocating a single numpy array for the full timeline
+    (which grows to ~2 GB for a 3-hour video at 48 kHz), the audio is
+    processed in fixed-size windows (~30 s) and each window is flushed
+    directly to disk.
+
+    The output is **raw 32-bit float little-endian PCM** (``f32le``) —
+    no container header and no file-size limit.
+
+    Returns the total number of samples written.
+    """
+    import numpy as np
+    import soundfile as sf
+    from scipy.signal import resample_poly
+
+    total_samples = int(total_duration * sample_rate) + sample_rate  # +1 s safety
+    chunk_samples = _SPEECH_CHUNK_SECONDS * sample_rate
+    fade_samples = int(crossfade_ms / 1000 * sample_rate)
+
+    entries = _collect_segment_entries(segments, synth_dir, sample_rate)
+
+    seg_ptr = 0
+    samples_written = 0
+
+    with output_path.open("wb") as out:
+        for chunk_offset in range(0, total_samples, chunk_samples):
+            chunk_len = min(chunk_samples, total_samples - chunk_offset)
+            chunk = np.zeros(chunk_len, dtype=np.float32)
+            chunk_end = chunk_offset + chunk_len
+
+            # Advance past segments that end before this chunk
+            while seg_ptr < len(entries) and entries[seg_ptr][1] <= chunk_offset:
+                seg_ptr += 1
+
+            for i in range(seg_ptr, len(entries)):
+                seg_start, seg_end, wav_path = entries[i]
+                if seg_start >= chunk_end:
+                    break
+                if seg_end <= chunk_offset:
+                    continue  # short segment between seg_ptr and a longer one
+
+                # Load segment audio
+                data, sr = sf.read(str(wav_path), dtype="float32")
+                if data.ndim > 1:
+                    data = data.mean(axis=1)  # stereo → mono
+
+                # Resample if needed (normally 48 kHz after loudnorm)
+                if sr != sample_rate:
+                    up = sample_rate // gcd(sample_rate, sr)
+                    down = sr // gcd(sample_rate, sr)
+                    data = resample_poly(data, up, down).astype(np.float32)
+
+                # Equal-power fade in/out (sin² curve keeps energy constant)
+                if fade_samples > 0 and len(data) > fade_samples * 2:
+                    t = np.linspace(0.0, np.pi / 2, fade_samples, dtype=np.float32)
+                    data[:fade_samples] *= np.sin(t)
+                    data[-fade_samples:] *= np.cos(t)
+
+                # Clip to total_samples boundary
+                if seg_start + len(data) > total_samples:
+                    data = data[: total_samples - seg_start]
+
+                # Mix overlapping region into chunk
+                src_start = max(0, chunk_offset - seg_start)
+                src_end = min(len(data), chunk_end - seg_start)
+                dst_start = max(0, seg_start - chunk_offset)
+                n = src_end - src_start
+                if n > 0:
+                    chunk[dst_start : dst_start + n] += data[src_start:src_end]
+
+            out.write(chunk.tobytes())
+            samples_written += chunk_len
+
+    return samples_written
 
 
 # ── FFmpeg final assembly ───────────────────────────────────────────────────
@@ -98,6 +150,7 @@ def _assemble_video(
     background_path: Path,
     output_path: Path,
     background_volume: float,
+    sample_rate: int = 48000,
     subtitle_path: Path | None = None,
     subtitle_mode: str = "softsub",
     output_format: str = "mp4",
@@ -118,6 +171,13 @@ def _assemble_video(
     inputs = [
         "-i",
         str(video_path),
+        # Speech track is raw f32le PCM — tell ffmpeg the format
+        "-f",
+        "f32le",
+        "-ar",
+        str(sample_rate),
+        "-ac",
+        "1",
         "-i",
         str(speech_path),
         "-i",
@@ -241,20 +301,18 @@ class AssembleStep(PipelineStep):
         synth_dir = self.settings.step_dir(state.video_id, STEP_DIRS[StepName.SYNTHESIZE])
         subtitle_path = self._resolve_subtitle_path(state)
 
-        import soundfile as sf
-
         # Step 1: Build unified speech track
         log_info("Building speech track from segments...")
         total_duration = self._get_total_duration(state, video_path)
-        speech_track = _build_speech_track(
+        speech_path = self.step_dir / SPEECH_TRACK_FILE
+        n_samples = _build_speech_track(
             state.segments,
             synth_dir,
+            speech_path,
             total_duration,
             sample_rate=self.settings.sample_rate,
         )
-        speech_path = self.step_dir / SPEECH_TRACK_FILE
-        sf.write(str(speech_path), speech_track, self.settings.sample_rate)
-        speech_dur = len(speech_track) / self.settings.sample_rate
+        speech_dur = n_samples / self.settings.sample_rate
         log_info(f"Speech track: {speech_dur:.1f}s ({len(state.segments)} segments)")
 
         # Step 2: Assemble final video via ffmpeg
@@ -265,6 +323,7 @@ class AssembleStep(PipelineStep):
             background_path=background_path,
             output_path=output_path,
             background_volume=self.settings.background_volume,
+            sample_rate=self.settings.sample_rate,
             subtitle_path=subtitle_path,
             subtitle_mode=self.settings.subtitle_mode,
             output_format=self.settings.output_format,

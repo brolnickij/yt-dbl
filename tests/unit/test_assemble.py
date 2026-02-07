@@ -179,7 +179,9 @@ class TestBuildSpeechTrack:
         for seg in segments:
             _write_wav(synth_dir / seg.synth_path, duration_sec=seg.duration)
 
-        track = _build_speech_track(segments, synth_dir, total_duration=12.0)
+        output = tmp_path / "speech.pcm"
+        _build_speech_track(segments, synth_dir, output, total_duration=12.0)
+        track = np.fromfile(str(output), dtype=np.float32)
 
         # Before first segment (~0.5s) should be silence
         silence_region = track[: int(0.4 * 48000)]
@@ -212,7 +214,9 @@ class TestBuildSpeechTrack:
         data = np.ones(sr, dtype=np.float32) * 0.8
         sf.write(str(synth_dir / "seg.wav"), data, sr)
 
-        track = _build_speech_track(segments, synth_dir, total_duration=2.0)
+        output = tmp_path / "speech.pcm"
+        _build_speech_track(segments, synth_dir, output, total_duration=2.0)
+        track = np.fromfile(str(output), dtype=np.float32)
 
         # First sample should be near zero (faded in)
         assert abs(track[0]) < 0.01
@@ -231,7 +235,9 @@ class TestBuildSpeechTrack:
         synth_dir = tmp_path / "synth"
         synth_dir.mkdir()
 
-        track = _build_speech_track(segments, synth_dir, total_duration=5.0)
+        output = tmp_path / "speech.pcm"
+        _build_speech_track(segments, synth_dir, output, total_duration=5.0)
+        track = np.fromfile(str(output), dtype=np.float32)
         assert np.all(track == 0.0)
 
     def test_clips_to_total_duration(self, tmp_path: Path) -> None:
@@ -251,8 +257,11 @@ class TestBuildSpeechTrack:
         _write_wav(synth_dir / "long.wav", duration_sec=5.0)
 
         # total_duration is only 2s — segment should be clipped
-        track = _build_speech_track(segments, synth_dir, total_duration=2.0)
+        output = tmp_path / "speech.pcm"
+        n_samples = _build_speech_track(segments, synth_dir, output, total_duration=2.0)
         expected_samples = int(2.0 * 48000) + 48000  # +1s safety
+        assert n_samples == expected_samples
+        track = np.fromfile(str(output), dtype=np.float32)
         assert len(track) == expected_samples
 
     def test_resamples_if_needed(self, tmp_path: Path) -> None:
@@ -273,11 +282,39 @@ class TestBuildSpeechTrack:
         data = np.ones(12000, dtype=np.float32) * 0.5  # 0.5s at 24kHz
         sf.write(str(synth_dir / "24k.wav"), data, 24000)
 
-        track = _build_speech_track(segments, synth_dir, total_duration=2.0, sample_rate=48000)
+        output = tmp_path / "speech.pcm"
+        _build_speech_track(segments, synth_dir, output, total_duration=2.0, sample_rate=48000)
+        track = np.fromfile(str(output), dtype=np.float32)
         # After resampling 0.5s @ 24kHz → ~24000 samples @ 48kHz
         # Check that data was placed (non-zero)
         segment_region = track[0:24000]
         assert np.any(segment_region != 0.0)
+
+    def test_segment_spanning_chunk_boundary(self, tmp_path: Path) -> None:
+        """A segment crossing a chunk boundary is mixed correctly."""
+        segments = [
+            Segment(
+                id=0,
+                text="Crosses boundary",
+                start=29.5,
+                end=30.5,
+                translated_text="Пересекает границу",
+                synth_path="cross.wav",
+            ),
+        ]
+        synth_dir = tmp_path / "synth"
+        synth_dir.mkdir()
+        _write_wav(synth_dir / "cross.wav", duration_sec=1.0)
+
+        output = tmp_path / "speech.pcm"
+        _build_speech_track(segments, synth_dir, output, total_duration=35.0)
+        track = np.fromfile(str(output), dtype=np.float32)
+
+        # Audio should be present on both sides of the 30s chunk boundary
+        pre_boundary = track[int(29.6 * 48000) : int(29.9 * 48000)]
+        post_boundary = track[int(30.1 * 48000) : int(30.4 * 48000)]
+        assert np.any(pre_boundary != 0.0)
+        assert np.any(post_boundary != 0.0)
 
 
 # ── FFmpeg assembly tests ──────────────────────────────────────────────────
@@ -318,6 +355,10 @@ class TestAssembleVideo:
             assert "sidechaincompress" in fc
             assert "alimiter" in fc
             assert "amix" in fc
+            # Speech input declared as raw f32le PCM
+            assert "-f" in args
+            f_idx = args.index("-f")
+            assert args[f_idx + 1] == "f32le"
 
     def test_softsub_mkv(self, tmp_path: Path) -> None:
         """MKV uses srt codec for subtitles."""
@@ -493,8 +534,7 @@ class TestAssembleStepRun:
         speech_path = step.step_dir / SPEECH_TRACK_FILE
         assert speech_path.exists()
 
-        data, sr = sf.read(str(speech_path))
-        assert sr == 48000
+        data = np.fromfile(str(speech_path), dtype=np.float32)
         # Duration should be ~13s (12s video + 1s safety)
         assert len(data) == int(12.0 * 48000) + 48000
 
