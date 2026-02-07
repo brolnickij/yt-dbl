@@ -1,15 +1,32 @@
 # yt-dbl
-> [!WARNING]
-> **NOT STABLE, PLEASE DON'T USE FOR LONG VIDEOS**
+Dub any YouTube video into another language — with the original speaker's voice
+
+```bash
+yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID" -t ru
+```
 
 > [!WARNING]
-> **Apple Silicon only** (M1/M2/M3/M4) — all ML inference runs on Metal GPU via MLX
->
-> Tested on **M4 Pro** (20-core GPU, 48 GB unified memory)
+> **Early stage** — not yet stable for long videos (30+ min)
 
-CLI tool for automatic YouTube video dubbing with voice cloning.
+> [!WARNING]
+> **Apple Silicon only** (M1–M4), tested on M4 Pro (48 GB)
 
-All ML inference (ASR, alignment, TTS) runs locally on Apple Silicon via [MLX](https://github.com/ml-explore/mlx). Translation is done through the Claude API. The output is a video file dubbed in the target language using the original speaker's cloned voice.
+One command: download, transcribe, translate (Claude), clone each speaker's voice (Qwen3-TTS), mix with the original background — done. All ML inference runs locally on your Mac's GPU via [MLX](https://github.com/ml-explore/mlx)
+
+
+## Why yt-dbl
+- **Human-quality voice cloning**<br>
+Qwen3-TTS per speaker, not a generic synth. Multiple speakers are diarized and voiced separately
+- **LLM translation**<br>
+Claude handles idioms, context, and produces TTS-friendly text — not word-for-word machine translation
+- **Background preserved**<br>
+BS-RoFormer separates vocals from music/sfx. Sidechain ducking mixes them back naturally
+- **Production audio chain**<br>
+Loudnorm (-16 LUFS), de-essing, pitch-preserving speed-up, equal-power crossfade
+- **Checkpoint & resume**<br>
+Every step saves state. Interrupted? `yt-dbl resume` continues where it stopped
+- **Private**<br>
+Everything local except the Claude API call
 
 
 ## Supported languages
@@ -19,42 +36,34 @@ All ML inference (ASR, alignment, TTS) runs locally on Apple Silicon via [MLX](h
 
 
 ## Requirements
-
-- **macOS** with **Apple Silicon** (M1/M2/M3/M4) — MLX only works on Metal
+- **macOS** with **Apple Silicon** (M1–M4) — MLX needs Metal
 - **Python** >= 3.12
-- **FFmpeg** — used for audio extraction, post-processing, and final assembly
-- **yt-dlp** — used to download videos from YouTube
-- **Anthropic API key** — for translation via Claude
+- **FFmpeg** — audio extraction, postprocessing, final assembly
+- **yt-dlp** — video download
+- **Anthropic API key** — translation via Claude
 
 
 ## Installation
 ### 1. Install system dependencies
 ```bash
-# FFmpeg (required)
-brew install ffmpeg
-
-# yt-dlp (required)
-brew install yt-dlp
+brew install ffmpeg yt-dlp
 ```
 
-> **Optional:** for pitch-preserving speed-up via rubberband, install `ffmpeg-full` instead:
-> ```bash
-> brew install ffmpeg-full
-> ```
-> Without it, the tool falls back to ffmpeg's `atempo` filter (works fine, just no pitch correction).
+> **Optional:** `brew install ffmpeg-full` for pitch-preserving speed-up via rubberband
+> Without it, falls back to ffmpeg's `atempo` filter (works fine, just no pitch correction)
 
 ### 2. Install yt-dbl
 ```bash
-# From PyPI (recommended)
+# From PyPI
 uv tool install --prerelease=allow yt-dbl
 
 # Or with pipx
 pipx install yt-dbl
 ```
 
-> **Note:** `--prerelease=allow` is needed because `mlx-audio` depends on a pre-release version of `transformers`.
+> `--prerelease=allow` is needed because `mlx-audio` depends on a pre-release `transformers`
 >
-> If `yt-dbl` is not found after installation, run `uv tool update-shell && source ~/.zshrc` to add `~/.local/bin` to your PATH.
+> If `yt-dbl` is not found, run `uv tool update-shell && source ~/.zshrc`
 
 <details>
 <summary>From source</summary>
@@ -64,25 +73,23 @@ git clone git@github.com:brolnickij/yt-dbl.git && cd yt-dbl
 uv sync
 ```
 
-When running from source, use `uv run yt-dbl` instead of `yt-dbl`.
+Use `uv run yt-dbl` instead of `yt-dbl` when running from source
 </details>
 
 ### 3. Set up the API key
-The Anthropic API key is required for the translation step. Add it to your shell profile so it persists across sessions:
-
 ```bash
 echo 'export YT_DBL_ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-Or create a `.env` file in the working directory:
+Or use a `.env` file:
 
 ```env
 YT_DBL_ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### 4. Pre-download models (optional)
-Models (~8.2 GB) are downloaded automatically on first run. To fetch them ahead of time:
+Models (~8.2 GB) download automatically on first run, or fetch them ahead of time:
 
 ```bash
 yt-dbl models download
@@ -90,59 +97,39 @@ yt-dbl models download
 
 
 ## Configuration
-Settings are loaded in order of priority:
-
-1. CLI arguments
-2. Environment variables (prefix `YT_DBL_`)
-3. `.env` file
-4. Default values
-
-Copy `.env.example` to `.env` and adjust as needed:
+Priority: CLI args > env vars (`YT_DBL_` prefix) > `.env` file > defaults
 
 ```bash
 cp .env.example .env
 ```
 
-### Key parameters
 | Env variable | Default | Description |
 |---|---|---|
-| `YT_DBL_ANTHROPIC_API_KEY` | — | **Required.** Anthropic API key for translation |
+| `YT_DBL_ANTHROPIC_API_KEY` | — | **Required** — Anthropic API key |
 | `YT_DBL_TARGET_LANGUAGE` | `ru` | Target language (ISO 639-1) |
 | `YT_DBL_OUTPUT_FORMAT` | `mp4` | `mp4` / `mkv` |
 | `YT_DBL_SUBTITLE_MODE` | `softsub` | `softsub` / `hardsub` / `none` |
 | `YT_DBL_BACKGROUND_VOLUME` | `0.15` | Background volume during speech (0.0–1.0) |
 | `YT_DBL_MAX_SPEED_FACTOR` | `1.4` | Max TTS speed-up to fit timing (1.0–2.0) |
 | `YT_DBL_MAX_LOADED_MODELS` | `0` (auto) | Max models in memory (0 = auto by RAM) |
-| `YT_DBL_WORK_DIR` | `dubbed` | Output directory for all jobs |
+| `YT_DBL_WORK_DIR` | `dubbed` | Output directory |
 
-> See [`.env.example`](.env.example) for the full list of 33 configurable parameters including model selection, separation tuning, TTS sampling, and chunked ASR settings.
+> See [`.env.example`](.env.example) for all 33 parameters
 
 
 ## Quick start
 ```bash
-# Dub a video into Russian (default)
-yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID"
-
-# Custom output directory
-yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID" -o ./my-output
-
-# Specify target language
-yt-dbl dub "https://youtu.be/VIDEO_ID" -t es
-
-# Start from a specific step (previous steps are skipped)
-yt-dbl dub "https://youtu.be/VIDEO_ID" --from-step translate
-
-# Check job status
-yt-dbl status VIDEO_ID
-
-# Resume an interrupted job
-yt-dbl resume VIDEO_ID
+yt-dbl dub "https://www.youtube.com/watch?v=VIDEO_ID"           # dub to Russian (default)
+yt-dbl dub "https://youtu.be/VIDEO_ID" -t es                    # dub to Spanish
+yt-dbl dub "https://youtu.be/VIDEO_ID" -o ./out                 # custom output dir
+yt-dbl dub "https://youtu.be/VIDEO_ID" --from-step translate    # re-run from a specific step
+yt-dbl resume VIDEO_ID                                          # resume after interrupt
+yt-dbl status VIDEO_ID                                          # check job progress
 ```
 
 
 ## Commands
 ### `dub` — dub a video
-
 ```bash
 yt-dbl dub <URL> [options]
 ```
@@ -153,39 +140,27 @@ yt-dbl dub <URL> [options]
 | `-o`, `--output-dir` | Output directory | `./dubbed` |
 | `--bg-volume` | Background volume (0.0–1.0) | `0.15` |
 | `--max-speed` | Max TTS speed-up (1.0–2.0) | `1.4` |
-| `--max-models` | Max models in memory | auto (by RAM) |
-| `--from-step` | Start from step: `download` / `separate` / `transcribe` / `translate` / `synthesize` / `assemble` | — |
+| `--max-models` | Max models in memory | auto |
+| `--from-step` | Start from: `download` / `separate` / `transcribe` / `translate` / `synthesize` / `assemble` | — |
 | `--no-subs` | Disable subtitles | `false` |
-| `--sub-mode` | Subtitle mode: `softsub` / `hardsub` / `none` | `softsub` |
-| `--format` | Output format: `mp4` / `mkv` | `mp4` |
+| `--sub-mode` | `softsub` / `hardsub` / `none` | `softsub` |
+| `--format` | `mp4` / `mkv` | `mp4` |
 
-### `resume` — resume an interrupted job
+### `resume` — pick up where it stopped
 ```bash
 yt-dbl resume <video_id> [--max-models N] [-o DIR]
 ```
 
-The pipeline saves `state.json` after each step. If interrupted, `resume` picks up from the last incomplete step.
-
-### `status` — check job status
+### `status` — check job progress
 ```bash
 yt-dbl status <video_id>
 ```
 
-Shows a table with each step's state (`pending` / `running` / `completed` / `failed`), execution time, and video metadata.
-
-### `models list` — list ML models
+### `models list` / `models download`
 ```bash
-yt-dbl models list
+yt-dbl models list        # show models, download status, size
+yt-dbl models download    # pre-download all models
 ```
-
-Shows all models, their download status, and size on disk.
-
-### `models download` — pre-download models
-```bash
-yt-dbl models download
-```
-
-Downloads all HuggingFace models. The `audio-separator` model is downloaded automatically on first use.
 
 
 ## How it works
@@ -268,9 +243,7 @@ Downloads all HuggingFace models. The `audio-separator` model is downloaded auto
 ```
 
 ### Memory management
-ML models are loaded and unloaded via an LRU manager.
-
-The number of models kept in memory is determined automatically based on available RAM:
+LRU model manager — auto-selects how many models to keep loaded based on RAM:
 
 ```
 RAM              Models     Batch (separation)
@@ -281,7 +254,7 @@ RAM              Models     Batch (separation)
 48+ GB           3          8
 ```
 
-The ASR model (~5.7 GB) is unloaded before loading the Aligner so both don't occupy memory at the same time.
+ASR (~5.7 GB) is unloaded before loading the Aligner to avoid holding both in memory
 
 ### Output directory structure
 ```
@@ -311,22 +284,24 @@ dubbed/
 
 
 ## Models
-| Model | Size | Task | Inference |
-|---|---|---|---|
-| [VibeVoice-ASR](https://huggingface.co/mlx-community/VibeVoice-ASR-4bit) | ~5.7 GB | ASR + speaker diarization | MLX (Metal) |
-| [Qwen3-ForcedAligner](https://huggingface.co/mlx-community/Qwen3-ForcedAligner-0.6B-8bit) | ~600 MB | Word-level alignment | MLX (Metal) |
-| [Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16) | ~1.7 GB | TTS with voice cloning | MLX (Metal) |
-| MelBand-RoFormer (BS-RoFormer) | ~200 MB | Vocal/background separation | ONNX + CoreML |
-| Claude Sonnet 4.5 | — | Text translation | API (Anthropic) |
+| Model | Size | Task |
+|---|---|---|
+| [VibeVoice-ASR](https://huggingface.co/mlx-community/VibeVoice-ASR-4bit) | ~5.7 GB | ASR + speaker diarization |
+| [Qwen3-ForcedAligner](https://huggingface.co/mlx-community/Qwen3-ForcedAligner-0.6B-8bit) | ~600 MB | Word-level alignment |
+| [Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16) | ~1.7 GB | TTS + voice cloning |
+| MelBand-RoFormer (BS-RoFormer) | ~200 MB | Vocal/background separation |
+| Claude Sonnet 4.5 | — | Translation (API) |
+
+All local models run on MLX (Metal GPU), total ~8.2 GB
 
 
 ## Development
 ```bash
-just check          # lint + format + typecheck + tests
-just test           # fast tests (parallel, coverage)
-just test-e2e       # E2E tests (requires FFmpeg + network)
-just fix            # auto-fix linter
-just format         # auto-format
+just check    # lint + format + typecheck + tests
+just test     # fast tests (parallel, coverage)
+just test-e2e # E2E (needs ffmpeg + network)
+just fix      # auto-fix lint
+just format   # auto-format
 ```
 
 
