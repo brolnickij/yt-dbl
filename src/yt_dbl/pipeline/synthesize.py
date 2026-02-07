@@ -31,6 +31,25 @@ if TYPE_CHECKING:
 SYNTH_META_FILE = "synth_meta.json"
 
 
+# ── Fingerprinting ─────────────────────────────────────────────────────────
+
+
+def _synth_fingerprint(segments: list[Segment], target_language: str) -> str:
+    """Compute a short hash from segment texts + target language.
+
+    Detects stale synthesis caches when upstream translations change
+    (e.g. via ``--from-step translate``).
+    """
+    import hashlib
+
+    payload = json.dumps(
+        [(seg.id, seg.translated_text or seg.text, seg.speaker) for seg in segments]
+        + [("_lang", target_language)],
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 # ── TTS generation ──────────────────────────────────────────────────────────
 
 
@@ -79,10 +98,12 @@ class SynthesizeStep(PipelineStep):
     def run(self, state: PipelineState) -> PipelineState:
         meta_path = self.step_dir / SYNTH_META_FILE
 
-        # Idempotency: reuse existing result
+        # Idempotency: reuse existing result if fingerprint matches
         if meta_path.exists():
-            log_info("Found existing synthesis — loading from cache")
-            return self._load_cached(state, meta_path)
+            cached = self._load_cached(state, meta_path)
+            if cached is not None:
+                log_info("Found existing synthesis — loading from cache")
+                return cached
 
         vocals_path = self._resolve_vocals(state)
 
@@ -418,6 +439,7 @@ class SynthesizeStep(PipelineStep):
     def _save_meta(self, state: PipelineState, path: Path) -> None:
         """Persist synthesis metadata for idempotent reloads."""
         data = {
+            "_fingerprint": _synth_fingerprint(state.segments, state.target_language),
             "segments": [
                 {
                     "id": seg.id,
@@ -437,9 +459,22 @@ class SynthesizeStep(PipelineStep):
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     @staticmethod
-    def _load_cached(state: PipelineState, meta_path: Path) -> PipelineState:
-        """Load cached synthesis results from disk."""
+    def _load_cached(state: PipelineState, meta_path: Path) -> PipelineState | None:
+        """Load cached synthesis results if the fingerprint still matches.
+
+        Returns ``None`` when the cache is stale (translations changed) or
+        missing a fingerprint (old format).
+        """
         data = json.loads(meta_path.read_text(encoding="utf-8"))
+
+        if not isinstance(data, dict) or "_fingerprint" not in data:
+            log_warning("Synthesis cache has no fingerprint — invalidating")
+            return None
+
+        current_fp = _synth_fingerprint(state.segments, state.target_language)
+        if data["_fingerprint"] != current_fp:
+            log_warning("Synthesis cache fingerprint mismatch — re-synthesizing")
+            return None
 
         seg_lookup = {seg.id: seg for seg in state.segments}
         for item in data["segments"]:

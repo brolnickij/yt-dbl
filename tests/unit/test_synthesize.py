@@ -16,6 +16,7 @@ from yt_dbl.pipeline.synthesize import (
     SYNTH_META_FILE,
     SynthesizeStep,
     _find_ref_text_for_speaker,
+    _synth_fingerprint,
 )
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, Speaker, StepName, StepStatus, Word
 
@@ -206,6 +207,7 @@ class TestPersistence:
         step._save_meta(state, meta_path)
 
         data = json.loads(meta_path.read_text())
+        assert "_fingerprint" in data
         assert len(data["segments"]) == 3
         assert data["segments"][0]["synth_path"] == "segment_0000.wav"
         assert data["speakers"][0]["reference_path"] == "ref_SPEAKER_00.wav"
@@ -222,13 +224,53 @@ class TestPersistence:
         for seg in state.segments:
             seg.synth_path = ""
 
-        state = step._load_cached(state, step.step_dir / SYNTH_META_FILE)
+        loaded = step._load_cached(state, step.step_dir / SYNTH_META_FILE)
+        assert loaded is not None
 
-        assert state.segments[0].synth_path == "segment_0000.wav"
-        assert state.segments[2].synth_path == "segment_0002.wav"
-        result = state.get_step(StepName.SYNTHESIZE)
+        assert loaded.segments[0].synth_path == "segment_0000.wav"
+        assert loaded.segments[2].synth_path == "segment_0002.wav"
+        result = loaded.get_step(StepName.SYNTHESIZE)
         assert "seg_0" in result.outputs
         assert "meta" in result.outputs
+
+    def test_load_cached_stale_fingerprint(self, tmp_path: Path) -> None:
+        """Cache with mismatched fingerprint is rejected."""
+        step, _, state = _make_step(tmp_path)
+        for seg in state.segments:
+            seg.synth_path = f"segment_{seg.id:04d}.wav"
+        step._save_meta(state, step.step_dir / SYNTH_META_FILE)
+
+        # Mutate a translation so the fingerprint diverges
+        state.segments[0].translated_text = "Changed translation"
+        for seg in state.segments:
+            seg.synth_path = ""
+
+        result = step._load_cached(state, step.step_dir / SYNTH_META_FILE)
+        assert result is None
+
+    def test_load_cached_old_format(self, tmp_path: Path) -> None:
+        """Cache without _fingerprint key (old format) is rejected."""
+        step, _, state = _make_step(tmp_path)
+        meta_path = step.step_dir / SYNTH_META_FILE
+        meta_path.write_text(json.dumps({"segments": [], "speakers": []}))
+
+        result = step._load_cached(state, meta_path)
+        assert result is None
+
+    def test_synth_fingerprint_deterministic(self) -> None:
+        """Same inputs produce the same fingerprint."""
+        segments = [Segment(id=0, start=0.0, end=1.0, text="Hello", speaker="S0")]
+        fp1 = _synth_fingerprint(segments, "ru")
+        fp2 = _synth_fingerprint(segments, "ru")
+        assert fp1 == fp2
+
+    def test_synth_fingerprint_changes_on_translation(self) -> None:
+        """Different translated text produces a different fingerprint."""
+        seg = Segment(id=0, start=0.0, end=1.0, text="Hello", speaker="S0")
+        fp1 = _synth_fingerprint([seg], "ru")
+        seg.translated_text = "Привет"
+        fp2 = _synth_fingerprint([seg], "ru")
+        assert fp1 != fp2
 
 
 # ── Full run tests (mocked TTS + ffmpeg) ───────────────────────────────────
