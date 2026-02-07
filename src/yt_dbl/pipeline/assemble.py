@@ -260,7 +260,7 @@ def _assemble_video(
         "-b:a",
         "320k",
         "-ar",
-        "48000",
+        str(sample_rate),
         str(output_path),
     ]
 

@@ -45,6 +45,26 @@ class TestExtractVoiceReference:
             af_idx = args.index("-af")
             assert "highpass=f=80" in args[af_idx + 1]
             assert "afftdn" in args[af_idx + 1]
+            # Default TTS sample rate
+            ar_idx = args.index("-ar")
+            assert args[ar_idx + 1] == "24000"
+
+    def test_custom_tts_sample_rate(self, tmp_path: Path) -> None:
+        """tts_sample_rate is forwarded to the -ar ffmpeg flag."""
+        speaker = Speaker(id="SPEAKER_00", reference_start=0.0, reference_end=3.0)
+        output = tmp_path / "ref.wav"
+
+        with patch("yt_dbl.utils.audio_processing.run_ffmpeg") as mock_ff:
+            extract_voice_reference(
+                tmp_path / "vocals.wav",
+                speaker,
+                output,
+                target_duration=5.0,
+                tts_sample_rate=16000,
+            )
+            args = mock_ff.call_args[0][0]
+            ar_idx = args.index("-ar")
+            assert args[ar_idx + 1] == "16000"
 
 
 # ── Speed adjustment tests ──────────────────────────────────────────────────
@@ -106,6 +126,24 @@ class TestPostprocessSegment:
             assert any("loudnorm" in a for a in call_args)
             assert any("highshelf" in a for a in call_args)
             assert any("compand" in a for a in call_args)
+            # Default output rate
+            ar_idx = call_args.index("-ar")
+            assert call_args[ar_idx + 1] == "48000"
+
+    def test_custom_output_sample_rate(self, tmp_path: Path) -> None:
+        """output_sample_rate is forwarded to the -ar ffmpeg flag."""
+        src = tmp_path / "raw.wav"
+        dst = tmp_path / "out.wav"
+        src.write_bytes(b"fake")
+
+        with patch(
+            "yt_dbl.utils.audio_processing.run_ffmpeg",
+            side_effect=_ffmpeg_touch_side_effect,
+        ) as mock_ff:
+            postprocess_segment(src, dst, output_sample_rate=44100)
+            call_args = mock_ff.call_args_list[0][0][0]
+            ar_idx = call_args.index("-ar")
+            assert call_args[ar_idx + 1] == "44100"
 
     def test_atempo_speed_one_call(self, tmp_path: Path) -> None:
         """With atempo speed: 1 ffmpeg call (atempo + loudnorm + deess)."""

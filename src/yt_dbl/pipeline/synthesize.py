@@ -139,6 +139,7 @@ class SynthesizeStep(PipelineStep):
                 speaker,
                 ref_path,
                 target_duration=self.settings.voice_ref_duration,
+                tts_sample_rate=self.settings.tts_sample_rate,
             )
             return speaker, ref_path
 
@@ -309,7 +310,12 @@ class SynthesizeStep(PipelineStep):
             if factor > SPEED_THRESHOLD:
                 speed = factor
 
-        postprocess_segment(raw_path, final_path, speed_factor=speed)
+        postprocess_segment(
+            raw_path,
+            final_path,
+            speed_factor=speed,
+            output_sample_rate=self.settings.sample_rate,
+        )
 
         if speed is not None:
             return final_path.name, round(speed, 3)

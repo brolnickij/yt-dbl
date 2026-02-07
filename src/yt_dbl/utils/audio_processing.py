@@ -37,6 +37,7 @@ def extract_voice_reference(
     speaker: Speaker,
     output_path: Path,
     target_duration: float,
+    tts_sample_rate: int = 24000,
 ) -> Path:
     """Extract a voice reference clip for a speaker from vocals.wav.
 
@@ -44,6 +45,9 @@ def extract_voice_reference(
     by this speaker), applies a highpass filter at 80 Hz to remove rumble
     and ``afftdn`` to reduce residual noise — both improve TTS cloning.
     Clips to *target_duration* seconds max.
+
+    *tts_sample_rate* should match the TTS model's native rate
+    (e.g. 24 000 Hz for Qwen3-TTS).
     """
     start = speaker.reference_start
     duration = min(speaker.reference_end - start, target_duration)
@@ -61,7 +65,7 @@ def extract_voice_reference(
             "-ac",
             "1",
             "-ar",
-            "24000",  # Qwen3-TTS internal sample rate for best cloning
+            str(tts_sample_rate),
             str(output_path),
         ]
     )
@@ -131,6 +135,7 @@ def postprocess_segment(
     input_path: Path,
     output_path: Path,
     speed_factor: float | None = None,
+    output_sample_rate: int = 48000,
 ) -> Path:
     """Postprocess a synthesized WAV: optional speed-up + loudnorm + de-ess.
 
@@ -138,6 +143,8 @@ def postprocess_segment(
     is short (1-10 s) and level-consistent -- the dynamic normaliser
     produces excellent results without the overhead of a two-pass
     measurement.
+
+    *output_sample_rate* sets the output file rate (default 48 000 Hz).
 
     Call counts:
     - **No speed:**   1 call (loudnorm + deess), 0 temp files.
@@ -167,8 +174,9 @@ def postprocess_segment(
     # Single pass: [speed +] loudnorm + deess
     loudnorm = f"loudnorm={_LOUDNORM_TARGET}"
     apply_filter = f"{speed_prefix}{loudnorm},{_DEESS_FILTER}"
+    ar = str(output_sample_rate)
     run_ffmpeg(
-        ["-i", str(apply_input), "-filter:a", apply_filter, "-ar", "48000", str(output_path)],
+        ["-i", str(apply_input), "-filter:a", apply_filter, "-ar", ar, str(output_path)],
         check=False,
     )
 
@@ -176,7 +184,7 @@ def postprocess_segment(
     if not output_path.exists() or output_path.stat().st_size == 0:
         fb_filter = f"{speed_prefix}{loudnorm}"
         run_ffmpeg(
-            ["-i", str(apply_input), "-filter:a", fb_filter, "-ar", "48000", str(output_path)],
+            ["-i", str(apply_input), "-filter:a", fb_filter, "-ar", ar, str(output_path)],
         )
 
     # Clean up rubberband temp
