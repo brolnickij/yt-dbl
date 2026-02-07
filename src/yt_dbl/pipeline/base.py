@@ -11,9 +11,9 @@ if TYPE_CHECKING:
 
     from yt_dbl.config import Settings
     from yt_dbl.models.manager import ModelManager
-    from yt_dbl.schemas import PipelineState, StepName
+    from yt_dbl.schemas import PipelineState
 
-from yt_dbl.schemas import STEP_DIRS
+from yt_dbl.schemas import STEP_DIRS, StepName
 
 # ── Exception hierarchy ─────────────────────────────────────────────────────
 
@@ -127,6 +127,10 @@ class PipelineStep(ABC):
                 self.model_manager.register(name, loader=loader)
             return self.model_manager.get(name)
         return loader()
+
+    def _resolve_vocals(self, state: PipelineState) -> Path:
+        """Resolve the vocals file produced by the separation step."""
+        return self.resolve_step_file(state, StepName.SEPARATE, "vocals")
 
     @property
     def step_dir(self) -> Path:

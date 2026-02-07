@@ -108,9 +108,6 @@ class SynthesizeStep(PipelineStep):
 
     # ── internals ───────────────────────────────────────────────────────────
 
-    def _resolve_vocals(self, state: PipelineState) -> Path:
-        return self.resolve_step_file(state, StepName.SEPARATE, "vocals")
-
     def _extract_references(
         self,
         state: PipelineState,

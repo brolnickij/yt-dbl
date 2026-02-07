@@ -254,9 +254,6 @@ class TranscribeStep(PipelineStep):
 
     # ── internals ───────────────────────────────────────────────────────────
 
-    def _resolve_vocals(self, state: PipelineState) -> Path:
-        return self.resolve_step_file(state, StepName.SEPARATE, "vocals")
-
     # ── ASR (VibeVoice-ASR) ─────────────────────────────────────────────────
 
     def _run_asr(self, vocals_path: Path) -> list[dict[str, Any]]:
