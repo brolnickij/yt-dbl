@@ -117,6 +117,10 @@ def _normalise_one_segment(seg: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     speaker_id = _first_key(seg, _SPEAKER_KEYS, cast=int)
+    if speaker_id is None:
+        log_warning(
+            f"Missing speaker_id in ASR segment at {start:.1f}-{end:.1f}s — defaulting to 0"
+        )
     return {
         "start": start,
         "end": end,

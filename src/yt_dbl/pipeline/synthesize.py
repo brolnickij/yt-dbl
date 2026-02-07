@@ -50,6 +50,7 @@ def _find_ref_text_for_speaker(
     for seg in segments:
         if seg.speaker == speaker.id:
             return seg.text
+    log_warning(f"No reference text found for speaker {speaker.id} — TTS quality may degrade")
     return ""
 
 
@@ -174,6 +175,10 @@ class SynthesizeStep(PipelineStep):
 
         # Pre-compute ref text map to avoid O(N²) scans
         ref_text_map = {s.id: _find_ref_text_for_speaker(state.segments, s) for s in state.speakers}
+
+        # Warn once per speaker missing a voice reference
+        for spk in sorted({s.speaker for s in state.segments if s.speaker not in refs}):
+            log_warning(f"No voice reference for {spk} — TTS will run without cloning")
 
         failed: list[tuple[int, str]] = []
         progress = create_progress()

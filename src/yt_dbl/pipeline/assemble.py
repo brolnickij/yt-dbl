@@ -379,6 +379,7 @@ class AssembleStep(PipelineStep):
         # Last resort: use the end of the last segment + buffer
         if state.segments:
             return max(seg.end for seg in state.segments) + 1.0
+        log_warning("No duration source available — using 60 s fallback")
         return 60.0
 
     @staticmethod
