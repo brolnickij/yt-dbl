@@ -104,6 +104,8 @@ class SynthesizeStep(PipelineStep):
             if cached is not None:
                 log_info("Found existing synthesis — loading from cache")
                 return cached
+            # Translations changed — clean up stale intermediates
+            self._invalidate_caches()
 
         vocals_path = self._resolve_vocals(state)
 
@@ -357,6 +359,16 @@ class SynthesizeStep(PipelineStep):
                 tmp = self.step_dir / f"{prefix}{seg.id:04d}.wav"
                 if tmp.exists():
                     tmp.unlink()
+
+    def _invalidate_caches(self) -> None:
+        """Remove stale synthesis outputs when the fingerprint mismatches.
+
+        Without this, per-segment idempotency checks (``raw_path.exists()``)
+        would silently reuse WAVs generated from outdated translations.
+        """
+        for pattern in ("raw_*.wav", "sped_*.wav", "segment_*.wav", SYNTH_META_FILE):
+            for path in self.step_dir.glob(pattern):
+                path.unlink()
 
     # ── TTS model ───────────────────────────────────────────────────────────
 
