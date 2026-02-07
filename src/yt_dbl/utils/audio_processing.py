@@ -7,8 +7,6 @@ state) and depend only on ``utils.audio`` for the ffmpeg wrapper.
 
 from __future__ import annotations
 
-import json
-import re
 from typing import TYPE_CHECKING
 
 from yt_dbl.utils.audio import has_rubberband, run_ffmpeg
@@ -129,36 +127,6 @@ def _atempo_chain(factor: float) -> str:
     return ",".join(filters)
 
 
-def _parse_loudnorm_stats(stderr: str) -> dict[str, str] | None:
-    """Parse loudnorm measurement JSON from ffmpeg stderr."""
-    json_match = re.search(r"\{[^}]+\}", stderr, re.DOTALL)
-    if not json_match:
-        return None
-    try:
-        stats: dict[str, str] = json.loads(json_match.group())
-        required = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
-        if all(k in stats for k in required):
-            return stats
-    except json.JSONDecodeError:
-        pass
-    return None
-
-
-def _loudnorm_apply_filter(stats: dict[str, str] | None) -> str:
-    """Build the loudnorm apply filter (pass 2) from measured stats."""
-    if stats:
-        return (
-            f"loudnorm={_LOUDNORM_TARGET}"
-            f":measured_I={stats['input_i']}"
-            f":measured_TP={stats['input_tp']}"
-            f":measured_LRA={stats['input_lra']}"
-            f":measured_thresh={stats['input_thresh']}"
-            f":offset={stats['target_offset']}"
-            f":linear=true"
-        )
-    return f"loudnorm={_LOUDNORM_TARGET}"
-
-
 def postprocess_segment(
     input_path: Path,
     output_path: Path,
@@ -166,19 +134,20 @@ def postprocess_segment(
 ) -> Path:
     """Postprocess a synthesized WAV: optional speed-up + loudnorm + de-ess.
 
-    Combines filters to minimise ffmpeg calls and intermediate files:
+    Uses **single-pass** loudnorm (no measure pass) because TTS output
+    is short (1-10 s) and level-consistent -- the dynamic normaliser
+    produces excellent results without the overhead of a two-pass
+    measurement.
 
-    - **No speed:**  2 calls (measure → apply+deess), 0 temp files.
-    - **rubberband:** 3 calls (speed → measure → apply+deess), 1 temp file
-      (cleaned automatically).
-    - **atempo:**    2 calls (speed+measure → speed+apply+deess), 0 temp files
-      (atempo is cheap enough to run twice).
+    Call counts:
+    - **No speed:**   1 call (loudnorm + deess), 0 temp files.
+    - **rubberband:** 2 calls (speed → loudnorm + deess), 1 temp file.
+    - **atempo:**     1 call (speed + loudnorm + deess), 0 temp files.
     """
     _speed_threshold = SPEED_THRESHOLD
     needs_speed = speed_factor is not None and speed_factor > _speed_threshold
 
     speed_prefix = ""
-    measure_input = input_path
     apply_input = input_path
     temp_sped: Path | None = None
 
@@ -190,23 +159,13 @@ def postprocess_segment(
             # rubberband is expensive — materialise once
             temp_sped = input_path.parent / f"_sped_{input_path.stem}.wav"
             speed_up_audio(input_path, temp_sped, speed_factor)
-            measure_input = temp_sped
             apply_input = temp_sped
         else:
-            # atempo is cheap — include in both passes
+            # atempo is cheap — include in the single pass
             speed_prefix = _atempo_chain(speed_factor) + ","
 
-    # Pass 1: measure loudness
-    measure_filter = f"{speed_prefix}loudnorm={_LOUDNORM_TARGET}:print_format=json"
-    measure = run_ffmpeg(
-        ["-i", str(measure_input), "-filter:a", measure_filter, "-f", "null", "/dev/null"],
-        check=False,
-    )
-
-    stats = _parse_loudnorm_stats(measure.stderr or "")
-    loudnorm = _loudnorm_apply_filter(stats)
-
-    # Pass 2: apply [speed +] loudnorm + deess in one call
+    # Single pass: [speed +] loudnorm + deess
+    loudnorm = f"loudnorm={_LOUDNORM_TARGET}"
     apply_filter = f"{speed_prefix}{loudnorm},{_DEESS_FILTER}"
     run_ffmpeg(
         ["-i", str(apply_input), "-filter:a", apply_filter, "-ar", "48000", str(output_path)],

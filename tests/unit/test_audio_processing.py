@@ -20,21 +20,8 @@ if TYPE_CHECKING:
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
-def _fake_measure_result() -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(
-        args=[],
-        returncode=0,
-        stdout="",
-        stderr=(
-            "[Parsed_loudnorm_0 @ 0x123] {\n"
-            '    "input_i" : "-20.00",\n'
-            '    "input_tp" : "-3.00",\n'
-            '    "input_lra" : "5.00",\n'
-            '    "input_thresh" : "-30.00",\n'
-            '    "target_offset" : "4.00"\n'
-            "}"
-        ),
-    )
+def _ok_result() -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
 
 # ── Voice reference tests ───────────────────────────────────────────────────
@@ -90,22 +77,21 @@ class TestSpeedUpAudio:
 
 
 def _ffmpeg_touch_side_effect(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Side effect that creates the output file for pass 2 calls."""
+    """Side effect that creates the output file (last positional arg)."""
     cmd_args = args[0] if args else kwargs.get("args", [])
-    # Only create file for pass 2 (not the measure pass that goes to /dev/null)
-    if cmd_args and "/dev/null" not in cmd_args:
+    if cmd_args:
         candidate = cmd_args[-1]
         if not candidate.startswith("-"):
             from pathlib import Path as _Path
 
             _Path(candidate).parent.mkdir(parents=True, exist_ok=True)
             _Path(candidate).write_bytes(b"fake-audio")
-    return _fake_measure_result()
+    return _ok_result()
 
 
 class TestPostprocessSegment:
-    def test_no_speed_two_calls(self, tmp_path: Path) -> None:
-        """Without speed: 2 ffmpeg calls (measure + apply+deess)."""
+    def test_no_speed_one_call(self, tmp_path: Path) -> None:
+        """Without speed: 1 ffmpeg call (single-pass loudnorm + deess)."""
         src = tmp_path / "raw.wav"
         dst = tmp_path / "out.wav"
         src.write_bytes(b"fake")
@@ -115,19 +101,14 @@ class TestPostprocessSegment:
             side_effect=_ffmpeg_touch_side_effect,
         ) as mock_ff:
             postprocess_segment(src, dst)
-            assert mock_ff.call_count == 2
-            # Pass 1: measure (to /dev/null)
-            pass1_args = mock_ff.call_args_list[0][0][0]
-            assert "/dev/null" in pass1_args
-            assert any("loudnorm" in a for a in pass1_args)
-            # Pass 2: apply + deess
-            pass2_args = mock_ff.call_args_list[1][0][0]
-            assert any("measured_I" in a for a in pass2_args)
-            assert any("highshelf" in a for a in pass2_args)
-            assert any("compand" in a for a in pass2_args)
+            assert mock_ff.call_count == 1
+            call_args = mock_ff.call_args_list[0][0][0]
+            assert any("loudnorm" in a for a in call_args)
+            assert any("highshelf" in a for a in call_args)
+            assert any("compand" in a for a in call_args)
 
-    def test_atempo_speed_two_calls(self, tmp_path: Path) -> None:
-        """With atempo speed: 2 ffmpeg calls (atempo is included in both)."""
+    def test_atempo_speed_one_call(self, tmp_path: Path) -> None:
+        """With atempo speed: 1 ffmpeg call (atempo + loudnorm + deess)."""
         src = tmp_path / "raw.wav"
         dst = tmp_path / "out.wav"
         src.write_bytes(b"fake")
@@ -140,14 +121,14 @@ class TestPostprocessSegment:
             ) as mock_ff,
         ):
             postprocess_segment(src, dst, speed_factor=1.3)
-            assert mock_ff.call_count == 2
-            # Both passes should contain atempo
-            for c in mock_ff.call_args_list:
-                filter_arg = [a for a in c[0][0] if "atempo" in a]
-                assert filter_arg, "atempo missing from filter chain"
+            assert mock_ff.call_count == 1
+            call_args = mock_ff.call_args_list[0][0][0]
+            filter_str = " ".join(call_args)
+            assert "atempo" in filter_str
+            assert "loudnorm" in filter_str
 
-    def test_rubberband_speed_three_calls(self, tmp_path: Path) -> None:
-        """With rubberband speed: 3 ffmpeg calls (speed + measure + apply+deess)."""
+    def test_rubberband_speed_two_calls(self, tmp_path: Path) -> None:
+        """With rubberband speed: 2 ffmpeg calls (speed + loudnorm+deess)."""
         src = tmp_path / "raw.wav"
         dst = tmp_path / "out.wav"
         src.write_bytes(b"fake")
@@ -160,8 +141,7 @@ class TestPostprocessSegment:
             ) as mock_ff,
         ):
             postprocess_segment(src, dst, speed_factor=1.3)
-            # speed + measure + apply+deess = 3
-            assert mock_ff.call_count == 3
+            assert mock_ff.call_count == 2
             # First call: rubberband
             rb_args = mock_ff.call_args_list[0][0][0]
             assert any("rubberband" in a for a in rb_args)
@@ -177,11 +157,10 @@ class TestPostprocessSegment:
             side_effect=_ffmpeg_touch_side_effect,
         ) as mock_ff:
             postprocess_segment(src, dst, speed_factor=1.005)
-            assert mock_ff.call_count == 2
-            for c in mock_ff.call_args_list:
-                filter_arg = " ".join(c[0][0])
-                assert "atempo" not in filter_arg
-                assert "rubberband" not in filter_arg
+            assert mock_ff.call_count == 1
+            filter_arg = " ".join(mock_ff.call_args_list[0][0][0])
+            assert "atempo" not in filter_arg
+            assert "rubberband" not in filter_arg
 
     def test_rubberband_temp_cleaned(self, tmp_path: Path) -> None:
         """Rubberband temporary file is deleted after processing."""
@@ -202,7 +181,7 @@ class TestPostprocessSegment:
             assert not temp_sped.exists()
 
     def test_empty_output_triggers_fallback(self, tmp_path: Path) -> None:
-        """When pass 2 creates a 0-byte file, fallback should re-run without deess."""
+        """When the primary call creates a 0-byte file, fallback re-runs without deess."""
         src = tmp_path / "raw.wav"
         dst = tmp_path / "out.wav"
         src.write_bytes(b"fake")
@@ -213,30 +192,30 @@ class TestPostprocessSegment:
             nonlocal call_count
             call_count += 1
             cmd_args = args[0] if args else kwargs.get("args", [])
-            if cmd_args and "/dev/null" not in cmd_args:
-                from pathlib import Path as _Path
-
+            if cmd_args:
                 candidate = cmd_args[-1]
                 if not candidate.startswith("-"):
+                    from pathlib import Path as _Path
+
                     _Path(candidate).parent.mkdir(parents=True, exist_ok=True)
-                    if call_count == 2:
-                        # Pass 2: create EMPTY file (0 bytes) → should trigger fallback
+                    if call_count == 1:
+                        # Primary call: create EMPTY file → should trigger fallback
                         _Path(candidate).write_bytes(b"")
                     else:
-                        # Pass 3 (fallback): create proper output
+                        # Fallback: create proper output
                         _Path(candidate).write_bytes(b"fallback-ok")
-            return _fake_measure_result()
+            return _ok_result()
 
         with patch(
             "yt_dbl.utils.audio_processing.run_ffmpeg",
             side_effect=_empty_then_ok,
         ) as mock_ff:
             postprocess_segment(src, dst)
-            assert mock_ff.call_count == 3  # measure + empty + fallback
+            assert mock_ff.call_count == 2  # primary + fallback
             assert dst.exists()
             assert dst.stat().st_size > 0
             # Fallback should not contain deess filters
-            fallback_args = mock_ff.call_args_list[2][0][0]
+            fallback_args = mock_ff.call_args_list[1][0][0]
             filter_str = " ".join(fallback_args)
             assert "loudnorm" in filter_str
             assert "highshelf" not in filter_str
@@ -254,28 +233,28 @@ class TestPostprocessSegment:
             nonlocal call_count
             call_count += 1
             cmd_args = args[0] if args else kwargs.get("args", [])
-            if cmd_args and "/dev/null" not in cmd_args:
-                from pathlib import Path as _Path
-
+            if cmd_args:
                 candidate = cmd_args[-1]
                 if not candidate.startswith("-"):
-                    if call_count == 2:
-                        # Pass 2 (loudnorm+deess): do NOT create output → trigger fallback
-                        return _fake_measure_result()
-                    # Pass 3 (fallback loudnorm only): create output
+                    if call_count == 1:
+                        # Primary (loudnorm+deess): do NOT create output → trigger fallback
+                        return _ok_result()
+                    # Fallback (loudnorm only): create output
+                    from pathlib import Path as _Path
+
                     _Path(candidate).parent.mkdir(parents=True, exist_ok=True)
                     _Path(candidate).write_bytes(b"fallback-audio")
-            return _fake_measure_result()
+            return _ok_result()
 
         with patch(
             "yt_dbl.utils.audio_processing.run_ffmpeg",
             side_effect=_selective_side_effect,
         ) as mock_ff:
             postprocess_segment(src, dst)
-            assert mock_ff.call_count == 3  # measure + failed apply + fallback
+            assert mock_ff.call_count == 2  # failed primary + fallback
             assert dst.exists()
             # Verify the fallback call does NOT contain deess filters
-            fallback_args = mock_ff.call_args_list[2][0][0]
+            fallback_args = mock_ff.call_args_list[1][0][0]
             filter_str = " ".join(fallback_args)
             assert "loudnorm" in filter_str
             assert "highshelf" not in filter_str
