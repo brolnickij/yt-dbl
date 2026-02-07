@@ -14,6 +14,8 @@ from yt_dbl.pipeline.base import StepValidationError, TranscriptionError
 from yt_dbl.pipeline.transcribe import (
     SEGMENTS_FILE,
     TranscribeStep,
+    _parse_timestamp,
+    _recover_partial_json,
     _reference_score,
 )
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, Speaker, StepName, StepStatus, Word
@@ -618,10 +620,6 @@ class TestTranscriptionConfig:
         cfg = Settings()
         assert "ForcedAligner" in cfg.transcription_aligner_model
 
-    def test_default_max_tokens(self) -> None:
-        cfg = Settings()
-        assert cfg.transcription_max_tokens == 8192
-
     def test_default_temperature(self) -> None:
         cfg = Settings()
         assert cfg.transcription_temperature == 0.0
@@ -834,7 +832,7 @@ class TestReconcileChunkSpeakers:
 class TestChunkingConfig:
     def test_default_max_chunk_minutes(self) -> None:
         cfg = Settings()
-        assert cfg.transcription_max_chunk_minutes == 55.0
+        assert cfg.transcription_max_chunk_minutes == 30.0
 
     def test_default_chunk_overlap(self) -> None:
         cfg = Settings()
@@ -846,3 +844,131 @@ class TestChunkingConfig:
         cfg = Settings()
         assert cfg.transcription_max_chunk_minutes == 45.0
         assert cfg.transcription_chunk_overlap_minutes == 3.0
+
+
+# ── Timestamp parsing tests ─────────────────────────────────────────────────
+
+
+class TestParseTimestamp:
+    """Tests for _parse_timestamp helper."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (0.0, 0.0),
+            (12.5, 12.5),
+            (100, 100.0),
+            ("0", 0.0),
+            ("12.5", 12.5),
+            ("123.456", 123.456),
+        ],
+        ids=["float-zero", "float", "int", "str-zero", "str-float", "str-long"],
+    )
+    def test_numeric(self, value: Any, expected: float) -> None:
+        assert _parse_timestamp(value) == pytest.approx(expected)
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("0:00", 0.0),
+            ("1:30", 90.0),
+            ("55:00", 3300.0),
+            ("0:05", 5.0),
+            ("12:34", 754.0),
+        ],
+        ids=["zero", "one-min-thirty", "fifty-five-min", "five-sec", "twelve-thirty-four"],
+    )
+    def test_mm_ss(self, value: str, expected: float) -> None:
+        assert _parse_timestamp(value) == pytest.approx(expected)
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("0:00:00", 0.0),
+            ("1:00:00", 3600.0),
+            ("2:30:15", 9015.0),
+            ("0:55:00", 3300.0),
+        ],
+        ids=["zero", "one-hour", "complex", "fifty-five-min"],
+    )
+    def test_hh_mm_ss(self, value: str, expected: float) -> None:
+        assert _parse_timestamp(value) == pytest.approx(expected)
+
+    @pytest.mark.parametrize(
+        "value",
+        [None, "", "abc", "12:ab", [], {}],
+        ids=["none", "empty", "alpha", "bad-mmss", "list", "dict"],
+    )
+    def test_unparseable(self, value: Any) -> None:
+        assert _parse_timestamp(value) is None
+
+    def test_normalise_segment_with_mmss_timestamps(self) -> None:
+        """Full integration: _normalise_asr_segments handles MM:SS timestamps."""
+        result = _fake_asr_result(
+            [
+                {
+                    "Start time": "1:30",
+                    "End time": "2:00",
+                    "Speaker ID": "0",
+                    "Content": "Hello everyone.",
+                },
+            ]
+        )
+        segs = TranscribeStep._normalise_asr_segments(result)
+        assert len(segs) == 1
+        assert segs[0]["start"] == pytest.approx(90.0)
+        assert segs[0]["end"] == pytest.approx(120.0)
+
+
+# ── Partial JSON recovery tests ──────────────────────────────────────────────
+
+
+class TestRecoverPartialJSON:
+    """Tests for _recover_partial_json helper."""
+
+    def test_empty_text(self) -> None:
+        assert _recover_partial_json("") == []
+
+    def test_no_json(self) -> None:
+        assert _recover_partial_json("just plain text no braces") == []
+
+    def test_single_complete_object(self) -> None:
+        text = 'prefix {"start": 0.0, "end": 1.0, "text": "Hi"} suffix'
+        result = _recover_partial_json(text)
+        assert len(result) == 1
+        assert result[0]["text"] == "Hi"
+
+    def test_truncated_array(self) -> None:
+        """Simulates truncated ASR output: array with 2 complete + 1 partial."""
+        text = (
+            '[{"start": 0.0, "end": 1.0, "speaker_id": 0, "text": "Hello"}, '
+            '{"start": 1.5, "end": 3.0, "speaker_id": 0, "text": "World"}, '
+            '{"start": 3.5, "end":'
+        )
+        result = _recover_partial_json(text)
+        assert len(result) == 2
+        assert result[0]["text"] == "Hello"
+        assert result[1]["text"] == "World"
+
+    def test_complete_array_still_works(self) -> None:
+        """Complete JSON also works (recovers individual objects)."""
+        text = '[{"start": 0, "end": 1, "text": "A"}, {"start": 2, "end": 3, "text": "B"}]'
+        result = _recover_partial_json(text)
+        assert len(result) == 2
+
+    def test_normalise_falls_back_to_recovery(self) -> None:
+        """_normalise_asr_segments uses partial recovery for truncated text."""
+
+        @dataclass
+        class _FakeResult:
+            text: str
+            segments: None = None
+
+        truncated = (
+            '[{"start": 0.0, "end": 1.0, "speaker_id": 0, "text": "Recovered"}, '
+            '{"start": 2.0, "end":'
+        )
+        result = _FakeResult(text=truncated)
+        segs = TranscribeStep._normalise_asr_segments(result)
+        assert len(segs) == 1
+        assert segs[0]["text"] == "Recovered"

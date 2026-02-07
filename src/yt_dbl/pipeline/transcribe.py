@@ -10,13 +10,20 @@ from __future__ import annotations
 import contextlib
 import gc
 import json
+import re as _re_module
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep, StepValidationError, TranscriptionError
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName, Word
 from yt_dbl.utils.languages import ALIGNER_LANGUAGE_MAP
-from yt_dbl.utils.logging import console, create_progress, log_info, suppress_library_noise
+from yt_dbl.utils.logging import (
+    console,
+    create_progress,
+    log_info,
+    log_warning,
+    suppress_library_noise,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -31,6 +38,51 @@ _END_KEYS = ("end", "end_time", "End", "End time")
 _SPEAKER_KEYS = ("speaker_id", "Speaker", "Speaker ID")
 _TEXT_KEYS = ("text", "Content")
 
+# Threshold for warning about potential truncation.  VibeVoice-ASR
+# defaults to max_tokens=8192 internally; hitting that limit with
+# no segments strongly suggests the output was truncated.
+_TRUNCATION_TOKEN_THRESHOLD = 8192
+
+# ── Timestamp parsing ──────────────────────────────────────────────────────
+
+# Pattern:  "HH:MM:SS", "MM:SS", "H:MM:SS", "M:SS"
+_TS_RE = _re_module.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
+
+
+def _parse_timestamp(value: Any) -> float | None:
+    """Parse a timestamp value to seconds (float).
+
+    Handles:
+      - Numeric types (int / float) — returned as-is.
+      - String floats like ``"12.5"`` — parsed directly.
+      - ``"MM:SS"`` / ``"HH:MM:SS"`` strings — converted to seconds.
+
+    Returns *None* when the value cannot be interpreted.
+    """
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    if not isinstance(value, str):
+        return None
+
+    # Try plain float first ("12.5", "0", "123.456")
+    try:
+        return float(value)
+    except ValueError:
+        pass
+
+    # Try MM:SS / HH:MM:SS
+    m = _TS_RE.match(value.strip())
+    if m:
+        parts = m.groups()  # (first, second, third_or_None)
+        if parts[2] is not None:
+            # Format: HH:MM:SS
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        # Format: MM:SS
+        return int(parts[0]) * 60 + int(parts[1])
+
+    return None
+
 
 def _first_key(
     seg: dict[str, Any],
@@ -38,9 +90,15 @@ def _first_key(
     *,
     cast: type = str,
 ) -> Any | None:
-    """Return value of the first matching key, cast to *cast*, or None."""
+    """Return value of the first matching key, cast to *cast*, or None.
+
+    When *cast* is ``float``, delegates to :func:`_parse_timestamp` so
+    that ``"MM:SS"`` / ``"HH:MM:SS"`` strings are handled correctly.
+    """
     for key in keys:
         if key in seg:
+            if cast is float:
+                return _parse_timestamp(seg[key])
             try:
                 return cast(seg[key])
             except (ValueError, TypeError):
@@ -63,6 +121,45 @@ def _normalise_one_segment(seg: dict[str, Any]) -> dict[str, Any] | None:
         "speaker_id": speaker_id if speaker_id is not None else 0,
         "text": str(text_val).strip(),
     }
+
+
+def _recover_partial_json(text: str) -> list[dict[str, Any]]:
+    """Extract complete JSON objects from possibly-truncated text.
+
+    When the ASR model output is cut short (e.g. by a ``max_tokens``
+    limit), the overall ``[...]`` array is syntactically broken, but
+    individual ``{...}`` objects that were fully emitted are still valid.
+    This function finds all balanced ``{...}`` substrings and attempts
+    ``json.loads`` on each one.
+    """
+    results: list[dict[str, Any]] = []
+    i = 0
+    while i < len(text):
+        if text[i] == "{":
+            depth = 0
+            j = i
+            while j < len(text):
+                if text[j] == "{":
+                    depth += 1
+                elif text[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[i : j + 1]
+                        try:
+                            obj = json.loads(candidate)
+                            if isinstance(obj, dict):
+                                results.append(obj)
+                        except json.JSONDecodeError:
+                            pass
+                        i = j + 1
+                        break
+                j += 1
+            else:
+                # Unbalanced brace — rest of text is truncated
+                break
+        else:
+            i += 1
+    return results
 
 
 # ── Reference segment scoring ───────────────────────────────────────────────
@@ -225,16 +322,35 @@ class TranscribeStep(PipelineStep):
     # ── Single-pass & chunked ASR helpers ───────────────────────────────────
 
     def _run_asr_single(self, model: STTModel, audio_path: Path) -> list[dict[str, Any]]:
-        """Run ASR on a single audio file (must fit within model limits)."""
+        """Run ASR on a single audio file (must fit within model limits).
+
+        ``max_tokens`` is set to ``-1`` (unlimited) so that the model
+        generates until EOS.  ``mlx_lm.generate_step`` treats ``-1`` as
+        infinite because the internal counter never equals ``-1``.
+        """
         with console.status(
             "  [info]Running ASR + diarization (this may take several minutes)...[/info]",
             spinner="dots",
         ):
             result = model.generate(
                 audio=str(audio_path),
-                max_tokens=self.settings.transcription_max_tokens,
+                max_tokens=-1,
                 temperature=self.settings.transcription_temperature,
             )
+
+        # Warn when the model may have been truncated (generation_tokens ≈ a
+        # suspiciously round power-of-two limit set by the library default).
+        gen_tokens = getattr(result, "generation_tokens", 0)
+        if (
+            gen_tokens
+            and gen_tokens >= _TRUNCATION_TOKEN_THRESHOLD
+            and not getattr(result, "segments", None)
+        ):
+            log_warning(
+                f"ASR generated {gen_tokens} tokens but produced no segments — "
+                "output may have been truncated"
+            )
+
         return self._normalise_asr_segments(result)
 
     def _run_asr_chunked(
@@ -245,22 +361,19 @@ class TranscribeStep(PipelineStep):
         max_chunk_sec: float,
         overlap_sec: float,
     ) -> list[dict[str, Any]]:
-        """Split long audio into overlapping chunks, run ASR, merge results."""
+        """Split long audio into overlapping chunks, run ASR, merge results.
+
+        After each chunk is transcribed its segments are persisted to
+        ``_asr_chunk_NNN_segments.json`` inside ``step_dir``.  If the
+        pipeline is interrupted and re-run, already-persisted chunks are
+        loaded from cache instead of re-transcribing.
+        """
         import soundfile as sf
 
         info = sf.info(str(vocals_path))
         sr = info.samplerate
 
-        # Calculate chunk boundaries
-        boundaries: list[tuple[float, float]] = []
-        chunk_start = 0.0
-        while chunk_start < duration_sec:
-            chunk_end = min(chunk_start + max_chunk_sec, duration_sec)
-            boundaries.append((chunk_start, chunk_end))
-            if chunk_end >= duration_sec:
-                break
-            chunk_start += max_chunk_sec - overlap_sec
-
+        boundaries = self._compute_chunk_boundaries(duration_sec, max_chunk_sec, overlap_sec)
         n_chunks = len(boundaries)
         dur_min = duration_sec / 60
         log_info(
@@ -268,7 +381,6 @@ class TranscribeStep(PipelineStep):
             f"({max_chunk_sec / 60:.0f} min each, {overlap_sec / 60:.0f} min overlap)"
         )
 
-        # Process each chunk: (chunk_start, chunk_end, segments_with_global_timestamps)
         processed: list[tuple[float, float, list[dict[str, Any]]]] = []
         global_max_spk = -1
 
@@ -277,58 +389,119 @@ class TranscribeStep(PipelineStep):
             task = progress.add_task("  ASR chunks", total=n_chunks)
 
             for i, (start_sec, end_sec) in enumerate(boundaries):
-                # Read chunk audio from file
-                start_frame = int(start_sec * sr)
-                num_frames = int((end_sec - start_sec) * sr)
+                raw = self._transcribe_single_chunk(
+                    model,
+                    vocals_path,
+                    sr,
+                    i,
+                    n_chunks,
+                    start_sec,
+                    end_sec,
+                )
 
-                with sf.SoundFile(str(vocals_path)) as f:
-                    f.seek(start_frame)
-                    audio_data = f.read(num_frames)
-
-                # Write temp chunk file
-                chunk_path = self.step_dir / f"_asr_chunk_{i:03d}.wav"
-                sf.write(str(chunk_path), audio_data, sr)
-
-                try:
-                    raw = self._run_asr_single(model, chunk_path)
-
-                    # Offset timestamps to global time
-                    for seg in raw:
-                        seg["start"] += start_sec
-                        seg["end"] += start_sec
-
-                    # Reconcile speaker IDs with previous chunk
-                    if i == 0:
-                        global_max_spk = max(
-                            (s["speaker_id"] for s in raw),
-                            default=0,
-                        )
-                    else:
-                        _prev_start, prev_end = boundaries[i - 1]
-                        mapping, global_max_spk = self._reconcile_chunk_speakers(
-                            prev_segments=processed[i - 1][2],
-                            curr_segments=raw,
-                            overlap_start=start_sec,
-                            overlap_end=prev_end,
-                            global_max_speaker=global_max_spk,
-                        )
-                        for seg in raw:
-                            seg["speaker_id"] = mapping.get(
-                                seg["speaker_id"],
-                                seg["speaker_id"],
-                            )
-
-                    processed.append((start_sec, end_sec, raw))
-                    log_info(
-                        f"Chunk {i + 1}/{n_chunks}: {len(raw)} segments "
-                        f"({start_sec / 60:.1f}-{end_sec / 60:.1f} min)"
+                # Reconcile speaker IDs with previous chunk
+                if i == 0:
+                    global_max_spk = max(
+                        (s["speaker_id"] for s in raw),
+                        default=0,
                     )
-                finally:
-                    chunk_path.unlink(missing_ok=True)
+                else:
+                    _prev_start, prev_end = boundaries[i - 1]
+                    mapping, global_max_spk = self._reconcile_chunk_speakers(
+                        prev_segments=processed[i - 1][2],
+                        curr_segments=raw,
+                        overlap_start=start_sec,
+                        overlap_end=prev_end,
+                        global_max_speaker=global_max_spk,
+                    )
+                    for seg in raw:
+                        seg["speaker_id"] = mapping.get(
+                            seg["speaker_id"],
+                            seg["speaker_id"],
+                        )
 
+                processed.append((start_sec, end_sec, raw))
                 progress.advance(task)
 
-        return self._merge_chunk_segments(processed, overlap_sec)
+        # Clean up chunk cache files after successful merge
+        merged = self._merge_chunk_segments(processed, overlap_sec)
+        for i in range(n_chunks):
+            (self.step_dir / f"_asr_chunk_{i:03d}_segments.json").unlink(missing_ok=True)
+
+        return merged
+
+    @staticmethod
+    def _compute_chunk_boundaries(
+        duration_sec: float,
+        max_chunk_sec: float,
+        overlap_sec: float,
+    ) -> list[tuple[float, float]]:
+        """Return ``(start, end)`` pairs for overlapping audio chunks."""
+        boundaries: list[tuple[float, float]] = []
+        chunk_start = 0.0
+        while chunk_start < duration_sec:
+            chunk_end = min(chunk_start + max_chunk_sec, duration_sec)
+            boundaries.append((chunk_start, chunk_end))
+            if chunk_end >= duration_sec:
+                break
+            chunk_start += max_chunk_sec - overlap_sec
+        return boundaries
+
+    def _transcribe_single_chunk(
+        self,
+        model: STTModel,
+        vocals_path: Path,
+        sr: int,
+        chunk_idx: int,
+        n_chunks: int,
+        start_sec: float,
+        end_sec: float,
+    ) -> list[dict[str, Any]]:
+        """Transcribe one audio chunk, with caching for resume."""
+        import soundfile as sf
+
+        chunk_cache_path = self.step_dir / f"_asr_chunk_{chunk_idx:03d}_segments.json"
+
+        if chunk_cache_path.exists():
+            raw: list[dict[str, Any]] = json.loads(
+                chunk_cache_path.read_text(encoding="utf-8"),
+            )
+            log_info(
+                f"Chunk {chunk_idx + 1}/{n_chunks}: loaded from cache "
+                f"({start_sec / 60:.1f}-{end_sec / 60:.1f} min, "
+                f"{len(raw)} segments)"
+            )
+            return raw
+
+        start_frame = int(start_sec * sr)
+        num_frames = int((end_sec - start_sec) * sr)
+
+        with sf.SoundFile(str(vocals_path)) as f:
+            f.seek(start_frame)
+            audio_data = f.read(num_frames)
+
+        chunk_audio_path = self.step_dir / f"_asr_chunk_{chunk_idx:03d}.wav"
+        sf.write(str(chunk_audio_path), audio_data, sr)
+
+        try:
+            raw = self._run_asr_single(model, chunk_audio_path)
+        finally:
+            chunk_audio_path.unlink(missing_ok=True)
+
+        for seg in raw:
+            seg["start"] += start_sec
+            seg["end"] += start_sec
+
+        chunk_cache_path.write_text(
+            json.dumps(raw, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        log_info(
+            f"Chunk {chunk_idx + 1}/{n_chunks}: {len(raw)} segments "
+            f"({start_sec / 60:.1f}-{end_sec / 60:.1f} min)"
+        )
+        return raw
 
     @staticmethod
     def _get_audio_duration_sec(path: Path) -> float:
@@ -447,22 +620,53 @@ class TranscribeStep(PipelineStep):
 
     @staticmethod
     def _normalise_asr_segments(result: Any) -> list[dict[str, Any]]:
-        """Normalise VibeVoice output to a consistent format."""
+        """Normalise VibeVoice output to a consistent format.
+
+        Falls back to partial-JSON recovery when the structured
+        ``result.segments`` list is empty, which can happen when the
+        model output was truncated (e.g. by a ``max_tokens`` limit).
+        """
         import re
 
         segments: list[dict[str, Any]] = []
 
         if hasattr(result, "segments") and result.segments:
             segments.extend(seg for seg in result.segments if isinstance(seg, dict))
-        elif hasattr(result, "text"):
-            # Fallback: try to parse JSON from raw text
+        elif hasattr(result, "text") and result.text:
             text = result.text
+            # Strategy 1: find a complete JSON array
             match = re.search(r"\[.*\]", text, re.DOTALL)
             if match:
                 with contextlib.suppress(json.JSONDecodeError):
                     segments = json.loads(match.group())
 
-        return [entry for seg in segments if (entry := _normalise_one_segment(seg)) is not None]
+            # Strategy 2 (partial recovery): extract individual {...} objects
+            # from truncated JSON.  This rescues segments that were fully
+            # serialised before the output was cut off.
+            if not segments:
+                recovered = _recover_partial_json(text)
+                if recovered:
+                    segments = recovered
+                    log_warning(
+                        f"Recovered {len(segments)} segments from truncated output "
+                        f"(text length: {len(text)})"
+                    )
+
+        if not segments and hasattr(result, "text") and result.text:
+            log_warning(
+                f"ASR returned 0 parseable segments (raw text length: {len(result.text)}, "
+                f"preview: {result.text[:200]!r})"
+            )
+
+        normalised = [
+            entry for seg in segments if (entry := _normalise_one_segment(seg)) is not None
+        ]
+
+        dropped = len(segments) - len(normalised)
+        if dropped > 0:
+            log_warning(f"Dropped {dropped}/{len(segments)} segments with missing fields")
+
+        return normalised
 
     # ── Forced alignment (Qwen3-ForcedAligner) ──────────────────────────────
 
