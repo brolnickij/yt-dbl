@@ -158,40 +158,25 @@ class TranslateStep(PipelineStep):
 
     # ── Claude API ──────────────────────────────────────────────────────────
 
+    # Maximum number of application-level retries when Claude returns
+    # unparseable output (e.g. malformed JSON).  SDK-level HTTP retries
+    # (429, 500, etc.) are handled separately by ``max_retries=3``.
+    _MAX_PARSE_RETRIES: int = 2
+
     def _translate_all(
         self,
         segments: list[Segment],
         target_language: str,
         source_language: str = "auto-detected",
     ) -> dict[int, str]:
-        """Translate all segments, batching automatically if needed."""
-        batch_size = self.settings.translation_batch_size
+        """Translate all segments, batching automatically if needed.
 
-        if len(segments) <= batch_size:
-            return self._translate_batch(segments, target_language, source_language)
-
-        # Split into batches
-        batches = [segments[i : i + batch_size] for i in range(0, len(segments), batch_size)]
-        log_info(
-            f"Splitting {len(segments)} segments into {len(batches)} batches "
-            f"({batch_size} segments each)"
-        )
-
-        all_translations: dict[int, str] = {}
-        for idx, batch in enumerate(batches):
-            log_info(f"Translating batch {idx + 1}/{len(batches)} ({len(batch)} segments)")
-            batch_result = self._translate_batch(batch, target_language, source_language)
-            all_translations.update(batch_result)
-
-        return all_translations
-
-    def _translate_batch(
-        self,
-        segments: list[Segment],
-        target_language: str,
-        source_language: str = "auto-detected",
-    ) -> dict[int, str]:
-        """Call Claude API with a batch of segments and return translations."""
+        A single ``Anthropic`` client is created and reused across all
+        batches.  Each batch result is cached to
+        ``_translate_batch_NNN.json`` so that a resumed pipeline skips
+        already-translated batches.  Cache files are cleaned up after a
+        successful merge.
+        """
         from anthropic import Anthropic
 
         client = Anthropic(
@@ -199,6 +184,74 @@ class TranslateStep(PipelineStep):
             max_retries=3,
         )
 
+        batch_size = self.settings.translation_batch_size
+
+        if len(segments) <= batch_size:
+            return self._translate_batch(
+                client,
+                segments,
+                target_language,
+                source_language,
+            )
+
+        # Split into batches
+        batches = [segments[i : i + batch_size] for i in range(0, len(segments), batch_size)]
+        n_batches = len(batches)
+        log_info(
+            f"Splitting {len(segments)} segments into {n_batches} batches "
+            f"({batch_size} segments each)"
+        )
+
+        all_translations: dict[int, str] = {}
+        for idx, batch in enumerate(batches):
+            cache_path = self.step_dir / f"_translate_batch_{idx:03d}.json"
+
+            # Resume: load already-translated batch from cache
+            if cache_path.exists():
+                cached = json.loads(cache_path.read_text(encoding="utf-8"))
+                batch_result = {int(item["id"]): str(item["translated_text"]) for item in cached}
+                log_info(
+                    f"Batch {idx + 1}/{n_batches}: loaded from cache "
+                    f"({len(batch_result)} translations)"
+                )
+            else:
+                log_info(f"Translating batch {idx + 1}/{n_batches} ({len(batch)} segments)")
+                batch_result = self._translate_batch(
+                    client,
+                    batch,
+                    target_language,
+                    source_language,
+                )
+                # Persist batch result for crash-resilient resume
+                batch_data = [
+                    {"id": k, "translated_text": v} for k, v in sorted(batch_result.items())
+                ]
+                cache_path.write_text(
+                    json.dumps(batch_data, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+            all_translations.update(batch_result)
+
+        # Clean up batch cache files after successful merge
+        for idx in range(n_batches):
+            (self.step_dir / f"_translate_batch_{idx:03d}.json").unlink(missing_ok=True)
+
+        return all_translations
+
+    def _translate_batch(
+        self,
+        client: Any,
+        segments: list[Segment],
+        target_language: str,
+        source_language: str = "auto-detected",
+    ) -> dict[int, str]:
+        """Call Claude API with a batch of segments and return translations.
+
+        Retries up to ``_MAX_PARSE_RETRIES`` times when Claude returns
+        syntactically invalid output (malformed JSON, wrong structure).
+        HTTP-level errors (429, 500) are retried by the SDK itself.
+        """
         duration_hint = _build_duration_hint(segments)
         system_prompt = _load_system_prompt().format(
             target_language=target_language,
@@ -207,26 +260,49 @@ class TranslateStep(PipelineStep):
         )
         user_message = _build_user_message(segments)
 
-        log_info(f"Calling Claude ({self.settings.claude_model}) with {len(segments)} segments...")
+        last_exc: Exception | None = None
+        for attempt in range(1 + self._MAX_PARSE_RETRIES):
+            if attempt > 0:
+                log_warning(f"Retrying translation (attempt {attempt + 1})...")
 
-        response = client.messages.create(
-            model=self.settings.claude_model,
-            max_tokens=self.settings.translation_max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-        )
+            log_info(
+                f"Calling Claude ({self.settings.claude_model}) with {len(segments)} segments..."
+            )
 
-        first_block = response.content[0]
-        if not hasattr(first_block, "text"):  # pragma: no cover
-            msg = f"Unexpected content block type: {type(first_block)}"
-            raise TranslationError(msg)
-        response_text: str = first_block.text
-        log_info(
-            f"Claude response: {response.usage.input_tokens} in / "
-            f"{response.usage.output_tokens} out tokens"
-        )
+            # Use streaming to avoid the Anthropic SDK 10-minute timeout
+            # on long translation requests.  get_final_message() returns
+            # the same Message object as messages.create().
+            with client.messages.stream(
+                model=self.settings.claude_model,
+                max_tokens=self.settings.translation_max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            ) as stream:
+                response = stream.get_final_message()
 
-        return _parse_translations(response_text)
+            first_block = response.content[0]
+            if not hasattr(first_block, "text"):  # pragma: no cover
+                msg = f"Unexpected content block type: {type(first_block)}"
+                raise TranslationError(msg)
+            response_text: str = first_block.text
+            log_info(
+                f"Claude response: {response.usage.input_tokens} in / "
+                f"{response.usage.output_tokens} out tokens"
+            )
+
+            try:
+                return _parse_translations(response_text)
+            except (json.JSONDecodeError, TranslationError, KeyError, ValueError) as exc:
+                last_exc = exc
+                log_warning(
+                    f"Failed to parse translation response: {exc} "
+                    f"(preview: {response_text[:200]!r})"
+                )
+
+        # All retries exhausted
+        raise TranslationError(
+            f"Failed to get valid translation after {1 + self._MAX_PARSE_RETRIES} attempts"
+        ) from last_exc
 
     # ── Persistence ─────────────────────────────────────────────────────────
 

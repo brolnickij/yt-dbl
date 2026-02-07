@@ -78,7 +78,7 @@ def _make_step(tmp_path: Path) -> tuple[TranslateStep, Settings, PipelineState]:
 
 
 def _fake_claude_response(translations: dict[int, str]) -> MagicMock:
-    """Create a fake Anthropic messages.create() response."""
+    """Create a fake Anthropic Message object (same shape as non-streaming)."""
     items = [{"id": k, "translated_text": v} for k, v in translations.items()]
     response_text = json.dumps(items, ensure_ascii=False)
 
@@ -93,6 +93,20 @@ def _fake_claude_response(translations: dict[int, str]) -> MagicMock:
     response.content = [content_block]
     response.usage = usage
     return response
+
+
+def _fake_claude_stream(translations: dict[int, str]) -> MagicMock:
+    """Create a fake streaming context manager wrapping a response.
+
+    Mimics ``client.messages.stream(...)`` used as a context manager
+    whose ``get_final_message()`` returns a standard ``Message``.
+    """
+    response = _fake_claude_response(translations)
+    stream = MagicMock()
+    stream.get_final_message.return_value = response
+    stream.__enter__ = MagicMock(return_value=stream)
+    stream.__exit__ = MagicMock(return_value=False)
+    return stream
 
 
 # ── Validation tests ────────────────────────────────────────────────────────
@@ -281,11 +295,11 @@ class TestTranslateStepRun:
             1: "Сегодня поговорим об интересном.",
             2: "Звучит отлично!",
         }
-        fake_response = _fake_claude_response(translations)
+        fake_stream = _fake_claude_stream(translations)
 
         with patch("anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
-            mock_client.messages.create.return_value = fake_response
+            mock_client.messages.stream.return_value = fake_stream
             mock_cls.return_value = mock_client
 
             state = step.run(state)
@@ -316,11 +330,11 @@ class TestTranslateStepRun:
         """If Claude only returns some translations, missing ones are logged."""
         step, _, state = _make_step(tmp_path)
         translations = {0: "Only first"}  # missing 1 and 2
-        fake_response = _fake_claude_response(translations)
+        fake_stream = _fake_claude_stream(translations)
 
         with patch("anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
-            mock_client.messages.create.return_value = fake_response
+            mock_client.messages.stream.return_value = fake_stream
             mock_cls.return_value = mock_client
 
             state = step.run(state)
@@ -339,14 +353,14 @@ class TestTranslateAPIErrors:
         step, _, state = _make_step(tmp_path)
         with patch("anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
-            mock_client.messages.create.side_effect = ConnectionError("network down")
+            mock_client.messages.stream.side_effect = ConnectionError("network down")
             mock_cls.return_value = mock_client
 
             with pytest.raises(ConnectionError, match="network down"):
                 step.run(state)
 
-    def test_invalid_json_from_claude_raises(self, tmp_path: Path) -> None:
-        """If Claude returns non-JSON text, a JSONDecodeError propagates."""
+    def test_invalid_json_retries_then_raises(self, tmp_path: Path) -> None:
+        """If Claude returns non-JSON text, retries are attempted before failing."""
         step, _, state = _make_step(tmp_path)
         content_block = MagicMock()
         content_block.text = "Sorry, I cannot translate this."
@@ -354,16 +368,24 @@ class TestTranslateAPIErrors:
         response.content = [content_block]
         response.usage = MagicMock(input_tokens=100, output_tokens=50)
 
+        stream = MagicMock()
+        stream.get_final_message.return_value = response
+        stream.__enter__ = MagicMock(return_value=stream)
+        stream.__exit__ = MagicMock(return_value=False)
+
         with patch("anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
-            mock_client.messages.create.return_value = response
+            mock_client.messages.stream.return_value = stream
             mock_cls.return_value = mock_client
 
-            with pytest.raises(json.JSONDecodeError):
+            with pytest.raises(TranslationError, match="Failed to get valid translation"):
                 step.run(state)
 
-    def test_non_array_response_raises_translation_error(self, tmp_path: Path) -> None:
-        """If Claude returns valid JSON but not an array, TranslationError is raised."""
+        # 1 initial + 2 retries = 3 total calls
+        assert mock_client.messages.stream.call_count == 3
+
+    def test_non_array_retries_then_raises(self, tmp_path: Path) -> None:
+        """If Claude returns valid JSON but not an array, retries then raises."""
         step, _, state = _make_step(tmp_path)
         content_block = MagicMock()
         content_block.text = '{"id": 0, "translated_text": "test"}'
@@ -371,13 +393,46 @@ class TestTranslateAPIErrors:
         response.content = [content_block]
         response.usage = MagicMock(input_tokens=100, output_tokens=50)
 
+        stream = MagicMock()
+        stream.get_final_message.return_value = response
+        stream.__enter__ = MagicMock(return_value=stream)
+        stream.__exit__ = MagicMock(return_value=False)
+
         with patch("anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
-            mock_client.messages.create.return_value = response
+            mock_client.messages.stream.return_value = stream
             mock_cls.return_value = mock_client
 
-            with pytest.raises(TranslationError, match="JSON array"):
+            with pytest.raises(TranslationError, match="Failed to get valid translation"):
                 step.run(state)
+
+        assert mock_client.messages.stream.call_count == 3
+
+    def test_parse_retry_succeeds_on_second_attempt(self, tmp_path: Path) -> None:
+        """If first response is bad JSON but second is valid, translation succeeds."""
+        step, _, state = _make_step(tmp_path)
+
+        bad_block = MagicMock()
+        bad_block.text = "not json"
+        bad_response = MagicMock()
+        bad_response.content = [bad_block]
+        bad_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+        bad_stream = MagicMock()
+        bad_stream.get_final_message.return_value = bad_response
+        bad_stream.__enter__ = MagicMock(return_value=bad_stream)
+        bad_stream.__exit__ = MagicMock(return_value=False)
+
+        good_stream = _fake_claude_stream({0: "A", 1: "B", 2: "C"})
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.side_effect = [bad_stream, good_stream]
+            mock_cls.return_value = mock_client
+
+            state = step.run(state)
+
+        assert mock_client.messages.stream.call_count == 2
+        assert state.segments[0].translated_text == "A"
 
 
 # ── Config tests ────────────────────────────────────────────────────────────
@@ -429,17 +484,17 @@ class TestBatchedTranslation:
         """Fewer segments than batch_size -> single API call."""
         step, _, state = _make_step(tmp_path)
         translations = {0: "A", 1: "B", 2: "C"}
-        fake_response = _fake_claude_response(translations)
+        fake_stream = _fake_claude_stream(translations)
 
         with patch("anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
-            mock_client.messages.create.return_value = fake_response
+            mock_client.messages.stream.return_value = fake_stream
             mock_cls.return_value = mock_client
 
             state = step.run(state)
 
         # Single call for 3 segments (batch_size=300)
-        assert mock_client.messages.create.call_count == 1
+        assert mock_client.messages.stream.call_count == 1
         assert state.segments[0].translated_text == "A"
 
     def test_large_input_multiple_batches(self, tmp_path: Path) -> None:
@@ -457,23 +512,142 @@ class TestBatchedTranslation:
         trans.status = StepStatus.COMPLETED
         trans.outputs = {"segments": "segments.json"}
 
-        def make_response_for_batch(
+        def make_stream_for_batch(
             *, model: str, max_tokens: int, system: str, messages: list[dict[str, str]]
         ) -> MagicMock:
             user_msg = messages[0]["content"]
             items = json.loads(user_msg)
             translations = {item["id"]: f"Translated {item['id']}" for item in items}
-            return _fake_claude_response(translations)
+            return _fake_claude_stream(translations)
 
         with patch("anthropic.Anthropic") as mock_cls:
             mock_client = MagicMock()
-            mock_client.messages.create.side_effect = make_response_for_batch
+            mock_client.messages.stream.side_effect = make_stream_for_batch
             mock_cls.return_value = mock_client
 
             state = step.run(state)
 
         # 25 segments / 10 per batch = 3 API calls
-        assert mock_client.messages.create.call_count == 3
+        assert mock_client.messages.stream.call_count == 3
         # All 25 segments translated
         for seg in state.segments:
             assert seg.translated_text == f"Translated {seg.id}"
+
+
+# ── Batch caching / resume tests ────────────────────────────────────────────
+
+
+class TestBatchCaching:
+    """Tests for per-batch caching in _translate_all."""
+
+    def _make_many_segments(self, n: int) -> list[Segment]:
+        return [
+            Segment(
+                id=i,
+                text=f"Segment {i}.",
+                start=float(i * 5),
+                end=float(i * 5 + 4),
+                speaker="SPEAKER_00",
+                language="en",
+            )
+            for i in range(n)
+        ]
+
+    def test_cached_batches_skip_api_call(self, tmp_path: Path) -> None:
+        """Pre-existing batch cache files are loaded without calling the API."""
+        cfg = Settings(
+            work_dir=tmp_path / "work",
+            anthropic_api_key="sk-test-key",
+            translation_batch_size=10,
+        )
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
+        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state.segments = self._make_many_segments(25)
+        trans = state.get_step(StepName.TRANSCRIBE)
+        trans.status = StepStatus.COMPLETED
+        trans.outputs = {"segments": "segments.json"}
+
+        # Pre-create cache for batch 0 and 1 (ids 0-9, 10-19)
+        for batch_idx, id_range in enumerate([(0, 10), (10, 20)]):
+            batch_data = [
+                {"id": i, "translated_text": f"Cached {i}"} for i in range(id_range[0], id_range[1])
+            ]
+            cache_path = step_dir / f"_translate_batch_{batch_idx:03d}.json"
+            cache_path.write_text(json.dumps(batch_data), encoding="utf-8")
+
+        # Only batch 2 (ids 20-24) needs API call
+        def make_stream_for_batch(
+            *, model: str, max_tokens: int, system: str, messages: list[dict[str, str]]
+        ) -> MagicMock:
+            user_msg = messages[0]["content"]
+            items = json.loads(user_msg)
+            translations = {item["id"]: f"Translated {item['id']}" for item in items}
+            return _fake_claude_stream(translations)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.side_effect = make_stream_for_batch
+            mock_cls.return_value = mock_client
+
+            state = step.run(state)
+
+        # Only 1 API call (batch 2), not 3
+        assert mock_client.messages.stream.call_count == 1
+        # Cached batches loaded correctly
+        assert state.segments[5].translated_text == "Cached 5"
+        assert state.segments[15].translated_text == "Cached 15"
+        # API batch translated correctly
+        assert state.segments[22].translated_text == "Translated 22"
+
+    def test_batch_caches_cleaned_after_success(self, tmp_path: Path) -> None:
+        """Batch cache files are removed after successful merge."""
+        cfg = Settings(
+            work_dir=tmp_path / "work",
+            anthropic_api_key="sk-test-key",
+            translation_batch_size=10,
+        )
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
+        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state.segments = self._make_many_segments(25)
+        trans = state.get_step(StepName.TRANSCRIBE)
+        trans.status = StepStatus.COMPLETED
+        trans.outputs = {"segments": "segments.json"}
+
+        def make_stream_for_batch(
+            *, model: str, max_tokens: int, system: str, messages: list[dict[str, str]]
+        ) -> MagicMock:
+            user_msg = messages[0]["content"]
+            items = json.loads(user_msg)
+            translations = {item["id"]: f"T{item['id']}" for item in items}
+            return _fake_claude_stream(translations)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.side_effect = make_stream_for_batch
+            mock_cls.return_value = mock_client
+
+            step.run(state)
+
+        # Batch cache files should be cleaned up
+        for i in range(3):
+            assert not (step_dir / f"_translate_batch_{i:03d}.json").exists()
+        # But final translations.json should exist
+        assert (step_dir / TRANSLATIONS_FILE).exists()
+
+    def test_single_batch_no_cache_files(self, tmp_path: Path) -> None:
+        """Single-batch translation (<=batch_size) doesn't create cache files."""
+        step, _, state = _make_step(tmp_path)
+        fake_stream = _fake_claude_stream({0: "A", 1: "B", 2: "C"})
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.return_value = fake_stream
+            mock_cls.return_value = mock_client
+
+            step.run(state)
+
+        # No batch cache files for single-batch run
+        cache_files = list(step.step_dir.glob("_translate_batch_*.json"))
+        assert cache_files == []
