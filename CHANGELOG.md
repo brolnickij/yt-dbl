@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v1.6.1 (2026-02-07)
+
+### Bug Fixes
+
+- **test**: Switch xdist to worksteal scheduler and fully mock GPU libs in test_memory
+  ([`e32670e`](https://github.com/brolnickij/yt-dbl/commit/e32670e49327021be2b87cb6c897b7b9708d03d9))
+
+### Documentation
+
+- Enhance README.md
+  ([`519d3f2`](https://github.com/brolnickij/yt-dbl/commit/519d3f2edda459973146154a8fdbc0edad919c2a))
+
+
 ## v1.6.0 (2026-02-07)
 
 ### Bug Fixes
