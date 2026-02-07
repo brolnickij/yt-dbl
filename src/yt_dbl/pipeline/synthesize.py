@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 from yt_dbl.pipeline.base import PipelineStep, StepValidationError, SynthesisError
 from yt_dbl.schemas import PipelineState, Segment, Speaker, StepName
-from yt_dbl.utils.audio import get_audio_duration
 from yt_dbl.utils.audio_processing import (
     SPEED_THRESHOLD,
     extract_voice_reference,
@@ -281,10 +280,12 @@ class SynthesizeStep(PipelineStep):
         combines filters into minimal ffmpeg calls, eliminating
         intermediate files.
         """
+        import soundfile as sf
+
         raw_path = self.step_dir / f"raw_{seg.id:04d}.wav"
         final_path = self.step_dir / f"segment_{seg.id:04d}.wav"
 
-        synth_dur = get_audio_duration(raw_path)
+        synth_dur = sf.info(str(raw_path)).duration
         original_dur = seg.duration
         speed: float | None = None
 

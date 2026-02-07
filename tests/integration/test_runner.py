@@ -153,8 +153,8 @@ def _pipeline_patches(sep_dir: Path) -> Any:
     )
     stack.enter_context(
         patch(
-            "yt_dbl.pipeline.synthesize.get_audio_duration",
-            return_value=1.0,
+            "soundfile.info",
+            return_value=MagicMock(duration=1.0),
         ),
     )
     stack.enter_context(

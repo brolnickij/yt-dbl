@@ -262,8 +262,8 @@ class TestSynthesizeStepRun:
                 side_effect=_fake_postprocess,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.get_audio_duration",
-                return_value=1.0,  # shorter than original → no speedup
+                "soundfile.info",
+                return_value=MagicMock(duration=1.0),  # shorter than original → no speedup
             ),
         ):
             state = step.run(state)
@@ -304,8 +304,8 @@ class TestSynthesizeStepRun:
                 side_effect=_fake_postprocess,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.get_audio_duration",
-                return_value=10.0,  # longer than original → speedup needed
+                "soundfile.info",
+                return_value=MagicMock(duration=10.0),  # longer than original → speedup needed
             ),
         ):
             state = step.run(state)
@@ -412,8 +412,8 @@ class TestSynthesizeStepRun:
                 side_effect=_failing_postprocess,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.get_audio_duration",
-                return_value=1.0,
+                "soundfile.info",
+                return_value=MagicMock(duration=1.0),
             ),
             pytest.raises(SynthesisError, match="1 segment"),
         ):
@@ -453,8 +453,8 @@ class TestSynthesizeStepRun:
                 side_effect=_all_fail,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.get_audio_duration",
-                return_value=1.0,
+                "soundfile.info",
+                return_value=MagicMock(duration=1.0),
             ),
             pytest.raises(SynthesisError, match="3 segment"),
         ):
@@ -507,8 +507,8 @@ class TestSynthesizeStepRun:
                 side_effect=_fake_postprocess,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.get_audio_duration",
-                return_value=1.0,
+                "soundfile.info",
+                return_value=MagicMock(duration=1.0),
             ),
         ):
             state = step.run(state)
@@ -560,8 +560,8 @@ class TestSynthesizeStepRun:
                 side_effect=_fake_postprocess,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.get_audio_duration",
-                return_value=1.0,
+                "soundfile.info",
+                return_value=MagicMock(duration=1.0),
             ),
             pytest.raises(SynthesisError, match="1 segment"),
         ):
@@ -641,8 +641,8 @@ class TestSynthesizeStepRun:
                 side_effect=_fake_postprocess,
             ),
             patch(
-                "yt_dbl.pipeline.synthesize.get_audio_duration",
-                return_value=1.0,
+                "soundfile.info",
+                return_value=MagicMock(duration=1.0),
             ),
             patch(
                 "yt_dbl.utils.memory.cleanup_gpu_memory",
