@@ -1,6 +1,44 @@
 # CHANGELOG
 
 
+## v1.7.0 (2026-02-07)
+
+### Bug Fixes
+
+- Add warnings for silent fallbacks in synthesize, transcribe, and assemble
+  ([`18ba7a5`](https://github.com/brolnickij/yt-dbl/commit/18ba7a530ed7c30776aaaf37a3b4475dacb0d769))
+
+- **synthesize**: Invalidate stale WAVs when fingerprint mismatches
+  ([`2f80f05`](https://github.com/brolnickij/yt-dbl/commit/2f80f05821a439ca0012a02bb0c3ae63c588c847))
+
+### Chores
+
+- Bump uv.lock
+  ([`2bc787e`](https://github.com/brolnickij/yt-dbl/commit/2bc787e31e90aca9ee80c6341d8e2659ce899e8a))
+
+### Features
+
+- **config**: Add Literal type validation for output_format and subtitle_mode
+  ([`7185be9`](https://github.com/brolnickij/yt-dbl/commit/7185be9eb0c3708cd94549afa956bcdb1e8ea581))
+
+- **synthesize**: Add fingerprint-based cache invalidation for synthesis meta
+  ([`6dfef7a`](https://github.com/brolnickij/yt-dbl/commit/6dfef7a537ec6125737dd75b85ea010a15f6ab76))
+
+### Refactoring
+
+- Extract format_file_size helper to replace repeated size calculations
+  ([`5e7716c`](https://github.com/brolnickij/yt-dbl/commit/5e7716cd88964903abc5304c0f6dcbdd5c6e9152))
+
+- **audio**: Replace hardcoded sample rates with configurable parameters
+  ([`7eefbc7`](https://github.com/brolnickij/yt-dbl/commit/7eefbc7d57ccc2635cc7923e75f9f9b4b5b16939))
+
+- **pipeline**: Extract _get_or_load_model to PipelineStep base class
+  ([`b7c3cb1`](https://github.com/brolnickij/yt-dbl/commit/b7c3cb1d4e68cf5b6188d8e3432c32af4a8353eb))
+
+- **pipeline**: Move _resolve_vocals to PipelineStep base class
+  ([`40af50c`](https://github.com/brolnickij/yt-dbl/commit/40af50c6cdd384947f257b280d44958207bde85d))
+
+
 ## v1.6.4 (2026-02-07)
 
 ### Performance Improvements
