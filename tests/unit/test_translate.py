@@ -20,6 +20,7 @@ from yt_dbl.pipeline.translate import (
     _generate_srt,
     _load_system_prompt,
     _parse_translations,
+    _segments_fingerprint,
 )
 from yt_dbl.schemas import STEP_DIRS, PipelineState, Segment, StepName, StepStatus, Word
 
@@ -259,15 +260,16 @@ class TestSRTGeneration:
 
 class TestPersistence:
     def test_save_and_load(self, tmp_path: Path) -> None:
-        step, _, _state = _make_step(tmp_path)
+        step, _, state = _make_step(tmp_path)
         translations = {0: "Привет", 1: "Мир", 2: "Отлично"}
 
         path = step.step_dir / TRANSLATIONS_FILE
-        step._save(path, translations)
+        step._save(path, translations, state.segments)
 
         data = json.loads(path.read_text(encoding="utf-8"))
-        assert len(data) == 3
-        assert data[0]["translated_text"] == "Привет"
+        assert "_fingerprint" in data
+        assert len(data["items"]) == 3
+        assert data["items"][0]["translated_text"] == "Привет"
 
     def test_load_cached(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
@@ -275,10 +277,11 @@ class TestPersistence:
 
         trans_path = step.step_dir / TRANSLATIONS_FILE
         srt_path = step.step_dir / SUBTITLES_FILE
-        step._save(trans_path, translations)
+        step._save(trans_path, translations, state.segments)
 
-        state = step._load_cached(state, trans_path, srt_path)
+        result = step._load_cached(state, trans_path, srt_path)
 
+        assert result is not None
         assert state.segments[0].translated_text == "Привет"
         assert state.segments[2].translated_text == "Отлично"
         assert srt_path.exists()  # SRT regenerated
@@ -316,9 +319,9 @@ class TestTranslateStepRun:
     def test_run_idempotent(self, tmp_path: Path) -> None:
         step, _, state = _make_step(tmp_path)
 
-        # Pre-create cached translations
+        # Pre-create cached translations with correct fingerprint
         translations = {0: "Cached A", 1: "Cached B", 2: "Cached C"}
-        step._save(step.step_dir / TRANSLATIONS_FILE, translations)
+        step._save(step.step_dir / TRANSLATIONS_FILE, translations, state.segments)
 
         # Run should load from cache, not call API
         state = step.run(state)
@@ -568,11 +571,16 @@ class TestBatchCaching:
         trans.status = StepStatus.COMPLETED
         trans.outputs = {"segments": "segments.json"}
 
-        # Pre-create cache for batch 0 and 1 (ids 0-9, 10-19)
+        # Pre-create cache for batch 0 and 1 (ids 0-9, 10-19) with fingerprints
         for batch_idx, id_range in enumerate([(0, 10), (10, 20)]):
-            batch_data = [
-                {"id": i, "translated_text": f"Cached {i}"} for i in range(id_range[0], id_range[1])
-            ]
+            batch_segments = state.segments[id_range[0] : id_range[1]]
+            batch_data = {
+                "_fingerprint": _segments_fingerprint(batch_segments),
+                "items": [
+                    {"id": i, "translated_text": f"Cached {i}"}
+                    for i in range(id_range[0], id_range[1])
+                ],
+            }
             cache_path = step_dir / f"_translate_batch_{batch_idx:03d}.json"
             cache_path.write_text(json.dumps(batch_data), encoding="utf-8")
 
@@ -651,3 +659,143 @@ class TestBatchCaching:
         # No batch cache files for single-batch run
         cache_files = list(step.step_dir.glob("_translate_batch_*.json"))
         assert cache_files == []
+
+
+# ── Stale cache validation tests ────────────────────────────────────────────
+
+
+class TestStaleCacheValidation:
+    """Tests for fingerprint-based cache invalidation."""
+
+    def test_segments_fingerprint_deterministic(self) -> None:
+        """Same segments produce the same fingerprint."""
+        segments = _make_segments()
+        assert _segments_fingerprint(segments) == _segments_fingerprint(segments)
+
+    def test_segments_fingerprint_changes_on_text(self) -> None:
+        """Changing segment text changes the fingerprint."""
+        seg_a = _make_segments()
+        seg_b = _make_segments()
+        seg_b[0].text = "Completely different text."
+        assert _segments_fingerprint(seg_a) != _segments_fingerprint(seg_b)
+
+    def test_segments_fingerprint_changes_on_id(self) -> None:
+        """Changing segment IDs changes the fingerprint."""
+        seg_a = _make_segments()
+        seg_b = _make_segments()
+        seg_b[0].id = 999
+        assert _segments_fingerprint(seg_a) != _segments_fingerprint(seg_b)
+
+    def test_stale_cache_invalidated_on_segment_change(self, tmp_path: Path) -> None:
+        """Cached translations are discarded when segments change."""
+        step, _, state = _make_step(tmp_path)
+        translations = {0: "Old A", 1: "Old B", 2: "Old C"}
+        step._save(step.step_dir / TRANSLATIONS_FILE, translations, state.segments)
+
+        # Simulate re-transcription producing different text
+        state.segments[0].text = "Completely new transcription."
+        fake_stream = _fake_claude_stream({0: "New A", 1: "New B", 2: "New C"})
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.return_value = fake_stream
+            mock_cls.return_value = mock_client
+
+            state = step.run(state)
+
+        # Old cache was invalidated, new translations applied
+        assert mock_client.messages.stream.call_count == 1
+        assert state.segments[0].translated_text == "New A"
+
+    def test_old_format_cache_invalidated(self, tmp_path: Path) -> None:
+        """Old-format translations.json (plain list) is treated as stale."""
+        step, _, state = _make_step(tmp_path)
+
+        # Write old-format cache (plain list, no fingerprint)
+        old_data = [
+            {"id": 0, "translated_text": "Old A"},
+            {"id": 1, "translated_text": "Old B"},
+            {"id": 2, "translated_text": "Old C"},
+        ]
+        (step.step_dir / TRANSLATIONS_FILE).write_text(json.dumps(old_data), encoding="utf-8")
+        fake_stream = _fake_claude_stream({0: "New A", 1: "New B", 2: "New C"})
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.return_value = fake_stream
+            mock_cls.return_value = mock_client
+
+            state = step.run(state)
+
+        assert mock_client.messages.stream.call_count == 1
+        assert state.segments[0].translated_text == "New A"
+
+    def test_stale_batch_cache_re_translated(self, tmp_path: Path) -> None:
+        """Batch caches with wrong fingerprint are re-translated."""
+        cfg = Settings(
+            work_dir=tmp_path / "work",
+            anthropic_api_key="sk-test-key",
+            translation_batch_size=10,
+        )
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
+        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state.segments = [
+            Segment(
+                id=i,
+                text=f"Segment {i}.",
+                start=float(i * 5),
+                end=float(i * 5 + 4),
+                speaker="SPEAKER_00",
+                language="en",
+            )
+            for i in range(20)
+        ]
+        trans = state.get_step(StepName.TRANSCRIBE)
+        trans.status = StepStatus.COMPLETED
+        trans.outputs = {"segments": "segments.json"}
+
+        # Pre-create STALE batch 0 cache (wrong fingerprint)
+        stale_data = {
+            "_fingerprint": "0000000000000000",
+            "items": [{"id": i, "translated_text": f"Stale {i}"} for i in range(10)],
+        }
+        (step_dir / "_translate_batch_000.json").write_text(
+            json.dumps(stale_data), encoding="utf-8"
+        )
+
+        def make_stream_for_batch(
+            *, model: str, max_tokens: int, system: str, messages: list[dict[str, str]]
+        ) -> MagicMock:
+            user_msg = messages[0]["content"]
+            items = json.loads(user_msg)
+            translations = {item["id"]: f"Fresh {item['id']}" for item in items}
+            return _fake_claude_stream(translations)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.side_effect = make_stream_for_batch
+            mock_cls.return_value = mock_client
+
+            state = step.run(state)
+
+        # Both batches needed API calls (batch 0 was stale)
+        assert mock_client.messages.stream.call_count == 2
+        assert state.segments[0].translated_text == "Fresh 0"
+        assert state.segments[15].translated_text == "Fresh 15"
+
+    def test_invalidate_caches_cleans_all_files(self, tmp_path: Path) -> None:
+        """_invalidate_caches removes translations, subtitles, and batch caches."""
+        step, _, state = _make_step(tmp_path)
+
+        # Create various cache files
+        step._save(step.step_dir / TRANSLATIONS_FILE, {0: "A"}, state.segments)
+        (step.step_dir / SUBTITLES_FILE).write_text("1\n00:00:00,000 --> 00:00:01,000\nA\n")
+        for i in range(5):
+            (step.step_dir / f"_translate_batch_{i:03d}.json").write_text("{}")
+
+        step._invalidate_caches()
+
+        assert not (step.step_dir / TRANSLATIONS_FILE).exists()
+        assert not (step.step_dir / SUBTITLES_FILE).exists()
+        assert list(step.step_dir.glob("_translate_batch_*.json")) == []

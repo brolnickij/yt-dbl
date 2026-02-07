@@ -106,6 +106,22 @@ def _format_srt_time(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
+def _segments_fingerprint(segments: list[Segment]) -> str:
+    """Compute a short hash fingerprint from segment IDs and source texts.
+
+    Used to detect stale translation caches after re-transcription.
+    When the upstream transcription step produces different segments,
+    the fingerprint changes and cached translations are invalidated.
+    """
+    import hashlib
+
+    payload = json.dumps(
+        [(seg.id, seg.text) for seg in segments],
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 class TranslateStep(PipelineStep):
     name = StepName.TRANSLATE
     description = "Translate via Claude API (auto-batched)"
@@ -124,10 +140,13 @@ class TranslateStep(PipelineStep):
         translations_path = self.step_dir / TRANSLATIONS_FILE
         srt_path = self.step_dir / SUBTITLES_FILE
 
-        # Idempotency: reuse existing result
+        # Idempotency: reuse existing result if segments haven't changed
         if translations_path.exists():
-            log_info("Found existing translations — loading from cache")
-            return self._load_cached(state, translations_path, srt_path)
+            cached = self._load_cached(state, translations_path, srt_path)
+            if cached is not None:
+                return cached
+            # Segments changed — invalidate all caches before re-translating
+            self._invalidate_caches()
 
         source_lang = state.source_language or "auto-detected"
         translations = self._translate_all(state.segments, state.target_language, source_lang)
@@ -144,7 +163,7 @@ class TranslateStep(PipelineStep):
         if missing:
             log_warning(f"{len(missing)} segments have no translation: {missing}")
 
-        self._save(translations_path, translations)
+        self._save(translations_path, translations, state.segments)
         _generate_srt(state.segments, srt_path)
         log_info(f"Generated subtitles: {SUBTITLES_FILE}")
 
@@ -205,16 +224,26 @@ class TranslateStep(PipelineStep):
         all_translations: dict[int, str] = {}
         for idx, batch in enumerate(batches):
             cache_path = self.step_dir / f"_translate_batch_{idx:03d}.json"
+            batch_result: dict[int, str] | None = None
 
             # Resume: load already-translated batch from cache
             if cache_path.exists():
-                cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                batch_result = {int(item["id"]): str(item["translated_text"]) for item in cached}
-                log_info(
-                    f"Batch {idx + 1}/{n_batches}: loaded from cache "
-                    f"({len(batch_result)} translations)"
-                )
-            else:
+                raw = json.loads(cache_path.read_text(encoding="utf-8"))
+                batch_fp = _segments_fingerprint(batch)
+
+                if isinstance(raw, dict) and raw.get("_fingerprint") == batch_fp:
+                    batch_result = {
+                        int(item["id"]): str(item["translated_text"]) for item in raw["items"]
+                    }
+                    log_info(
+                        f"Batch {idx + 1}/{n_batches}: loaded from cache "
+                        f"({len(batch_result)} translations)"
+                    )
+                else:
+                    log_warning(f"Batch {idx + 1}/{n_batches}: cache is stale — re-translating")
+                    cache_path.unlink()
+
+            if batch_result is None:
                 log_info(f"Translating batch {idx + 1}/{n_batches} ({len(batch)} segments)")
                 batch_result = self._translate_batch(
                     client,
@@ -222,10 +251,13 @@ class TranslateStep(PipelineStep):
                     target_language,
                     source_language,
                 )
-                # Persist batch result for crash-resilient resume
-                batch_data = [
-                    {"id": k, "translated_text": v} for k, v in sorted(batch_result.items())
-                ]
+                # Persist batch result with fingerprint for crash-resilient resume
+                batch_data = {
+                    "_fingerprint": _segments_fingerprint(batch),
+                    "items": [
+                        {"id": k, "translated_text": v} for k, v in sorted(batch_result.items())
+                    ],
+                }
                 cache_path.write_text(
                     json.dumps(batch_data, ensure_ascii=False),
                     encoding="utf-8",
@@ -233,9 +265,9 @@ class TranslateStep(PipelineStep):
 
             all_translations.update(batch_result)
 
-        # Clean up batch cache files after successful merge
-        for idx in range(n_batches):
-            (self.step_dir / f"_translate_batch_{idx:03d}.json").unlink(missing_ok=True)
+        # Clean up all batch cache files after successful merge
+        for path in self.step_dir.glob("_translate_batch_*.json"):
+            path.unlink()
 
         return all_translations
 
@@ -306,10 +338,22 @@ class TranslateStep(PipelineStep):
 
     # ── Persistence ─────────────────────────────────────────────────────────
 
+    def _invalidate_caches(self) -> None:
+        """Remove stale translation cache files from step directory."""
+        for path in self.step_dir.glob("_translate_batch_*.json"):
+            path.unlink()
+        for name in (TRANSLATIONS_FILE, SUBTITLES_FILE):
+            path = self.step_dir / name
+            if path.exists():
+                path.unlink()
+
     @staticmethod
-    def _save(path: Path, translations: dict[int, str]) -> None:
-        """Save translations as JSON."""
-        data = [{"id": k, "translated_text": v} for k, v in sorted(translations.items())]
+    def _save(path: Path, translations: dict[int, str], segments: list[Segment]) -> None:
+        """Save translations as JSON with a segment fingerprint for cache validation."""
+        data = {
+            "_fingerprint": _segments_fingerprint(segments),
+            "items": [{"id": k, "translated_text": v} for k, v in sorted(translations.items())],
+        }
         path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
@@ -317,10 +361,28 @@ class TranslateStep(PipelineStep):
         state: PipelineState,
         translations_path: Path,
         srt_path: Path,
-    ) -> PipelineState:
-        """Load cached translations from disk."""
-        data = json.loads(translations_path.read_text(encoding="utf-8"))
-        translations = {int(item["id"]): str(item["translated_text"]) for item in data}
+    ) -> PipelineState | None:
+        """Load cached translations if the segment fingerprint still matches.
+
+        Returns ``None`` when the cache is stale (segments changed since
+        the translations were generated) or uses an old format without
+        a fingerprint.
+        """
+        raw = json.loads(translations_path.read_text(encoding="utf-8"))
+
+        # Old format (plain list) has no fingerprint — treat as stale
+        if isinstance(raw, list):
+            log_warning("Translations cache has no fingerprint — invalidating")
+            return None
+
+        current_fp = _segments_fingerprint(state.segments)
+        if raw.get("_fingerprint") != current_fp:
+            log_warning("Segments changed since last translation — invalidating cache")
+            return None
+
+        log_info("Found existing translations — loading from cache")
+        items: list[dict[str, Any]] = raw["items"]
+        translations = {int(item["id"]): str(item["translated_text"]) for item in items}
 
         for seg in state.segments:
             if seg.id in translations:
