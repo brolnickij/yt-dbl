@@ -222,11 +222,11 @@ class TranslateStep(PipelineStep):
         )
 
         all_translations: dict[int, str] = {}
+
+        # Phase 1: load cached batches, collect uncached indices
+        uncached: list[int] = []
         for idx, batch in enumerate(batches):
             cache_path = self.step_dir / f"_translate_batch_{idx:03d}.json"
-            batch_result: dict[int, str] | None = None
-
-            # Resume: load already-translated batch from cache
             if cache_path.exists():
                 raw = json.loads(cache_path.read_text(encoding="utf-8"))
                 batch_fp = _segments_fingerprint(batch)
@@ -235,35 +235,41 @@ class TranslateStep(PipelineStep):
                     batch_result = {
                         int(item["id"]): str(item["translated_text"]) for item in raw["items"]
                     }
+                    all_translations.update(batch_result)
                     log_info(
                         f"Batch {idx + 1}/{n_batches}: loaded from cache "
                         f"({len(batch_result)} translations)"
                     )
-                else:
-                    log_warning(f"Batch {idx + 1}/{n_batches}: cache is stale — re-translating")
-                    cache_path.unlink()
+                    continue
+                log_warning(f"Batch {idx + 1}/{n_batches}: cache is stale — re-translating")
+                cache_path.unlink()
+            uncached.append(idx)
 
-            if batch_result is None:
+        # Phase 2: translate uncached batches in parallel
+        if uncached:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            def _do_batch(idx: int) -> tuple[int, dict[int, str]]:
+                batch = batches[idx]
                 log_info(f"Translating batch {idx + 1}/{n_batches} ({len(batch)} segments)")
-                batch_result = self._translate_batch(
-                    client,
-                    batch,
-                    target_language,
-                    source_language,
-                )
-                # Persist batch result with fingerprint for crash-resilient resume
+                result = self._translate_batch(client, batch, target_language, source_language)
+                cache_path = self.step_dir / f"_translate_batch_{idx:03d}.json"
                 batch_data = {
                     "_fingerprint": _segments_fingerprint(batch),
-                    "items": [
-                        {"id": k, "translated_text": v} for k, v in sorted(batch_result.items())
-                    ],
+                    "items": [{"id": k, "translated_text": v} for k, v in sorted(result.items())],
                 }
                 cache_path.write_text(
                     json.dumps(batch_data, ensure_ascii=False),
                     encoding="utf-8",
                 )
+                return idx, result
 
-            all_translations.update(batch_result)
+            max_workers = min(len(uncached), 4)  # cap concurrent API calls
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {pool.submit(_do_batch, idx): idx for idx in uncached}
+                for future in as_completed(futures):
+                    idx, batch_result = future.result()
+                    all_translations.update(batch_result)
 
         # Clean up all batch cache files after successful merge
         for path in self.step_dir.glob("_translate_batch_*.json"):
