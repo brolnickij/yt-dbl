@@ -140,6 +140,17 @@ def log_warning(msg: str) -> None:
     console.print(f"  [warning]⚠ {msg}[/warning]")
 
 
+def format_file_size(size_bytes: int) -> str:
+    """Format byte count as human-readable string (e.g. ``142.3 MB``)."""
+    if size_bytes == 0:
+        return "0 B"
+    gb = size_bytes / (1024**3)
+    if gb >= 1.0:
+        return f"{gb:.1f} GB"
+    mb = size_bytes / (1024**2)
+    return f"{mb:.1f} MB"
+
+
 def log_model_load(name: str, elapsed: float = 0.0, mem_delta_mb: float = 0.0) -> None:
     parts = [f"  [model]↑ Loading model:[/model] {name}"]
     if elapsed > 0:

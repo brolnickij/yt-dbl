@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from yt_dbl.pipeline.base import PipelineStep, SeparationError, StepValidationError
 from yt_dbl.schemas import STEP_DIRS, StepName
-from yt_dbl.utils.logging import log_info, log_warning
+from yt_dbl.utils.logging import format_file_size, log_info, log_warning
 
 if TYPE_CHECKING:
     from yt_dbl.schemas import PipelineState
@@ -46,7 +46,7 @@ class SeparateStep(PipelineStep):
             log_info("Separation outputs already exist, skipping")
         else:
             audio_path = self._get_audio_path(state)
-            log_info(f"Input: {audio_path.name} ({audio_path.stat().st_size / 1024 / 1024:.1f} MB)")
+            log_info(f"Input: {audio_path.name} ({format_file_size(audio_path.stat().st_size)})")
 
             self._run_separation(audio_path)
 
@@ -56,9 +56,9 @@ class SeparateStep(PipelineStep):
             if not background_path.exists():
                 raise SeparationError("Background file was not created")
 
-        vocals_mb = vocals_path.stat().st_size / (1024 * 1024)
-        bg_mb = background_path.stat().st_size / (1024 * 1024)
-        log_info(f"Vocals: {vocals_mb:.1f} MB, Background: {bg_mb:.1f} MB")
+        vocals_size = format_file_size(vocals_path.stat().st_size)
+        bg_size = format_file_size(background_path.stat().st_size)
+        log_info(f"Vocals: {vocals_size}, Background: {bg_size}")
 
         result = state.get_step(self.name)
         result.outputs = {

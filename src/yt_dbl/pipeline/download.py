@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from yt_dbl.pipeline.base import DownloadError, PipelineStep, StepValidationError
 from yt_dbl.schemas import PipelineState, StepName, VideoMeta
 from yt_dbl.utils.audio import extract_audio
-from yt_dbl.utils.logging import create_progress, log_info
+from yt_dbl.utils.logging import create_progress, format_file_size, log_info
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -68,9 +68,9 @@ class DownloadStep(PipelineStep):
         if not audio_path.exists():
             raise DownloadError("Audio file was not created")
 
-        video_size_mb = video_path.stat().st_size / (1024 * 1024)
-        audio_size_mb = audio_path.stat().st_size / (1024 * 1024)
-        log_info(f"Video: {video_size_mb:.1f} MB, Audio: {audio_size_mb:.1f} MB")
+        video_size = format_file_size(video_path.stat().st_size)
+        audio_size = format_file_size(audio_path.stat().st_size)
+        log_info(f"Video: {video_size}, Audio: {audio_size}")
 
         result = state.get_step(self.name)
         result.outputs = {
@@ -171,5 +171,4 @@ class DownloadStep(PipelineStep):
         if not output_path.exists():
             raise DownloadError("yt-dlp finished but output file not found")
 
-        size_mb = output_path.stat().st_size / (1024 * 1024)
-        log_info(f"Downloaded {size_mb:.1f} MB")
+        log_info(f"Downloaded {format_file_size(output_path.stat().st_size)}")

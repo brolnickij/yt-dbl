@@ -13,6 +13,7 @@ from rich.progress import Progress
 from yt_dbl.schemas import STEP_ORDER, StepName
 from yt_dbl.utils.logging import (
     create_progress,
+    format_file_size,
     get_metal_memory_mb,
     get_rss_mb,
     log_info,
@@ -204,3 +205,20 @@ class TestSuppressLibraryNoise:
             raise RuntimeError("boom")
 
         assert logger.level == original_level
+
+
+# ── File size formatting ────────────────────────────────────────────────────
+
+
+class TestFormatFileSize:
+    def test_zero_bytes(self) -> None:
+        assert format_file_size(0) == "0 B"
+
+    def test_megabytes(self) -> None:
+        assert format_file_size(5 * 1024 * 1024) == "5.0 MB"
+
+    def test_gigabytes(self) -> None:
+        assert format_file_size(int(2.5 * 1024**3)) == "2.5 GB"
+
+    def test_fractional_megabytes(self) -> None:
+        assert format_file_size(int(142.3 * 1024**2)) == "142.3 MB"
