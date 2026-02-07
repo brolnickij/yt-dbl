@@ -14,6 +14,7 @@ from yt_dbl.pipeline.base import StepValidationError, TranscriptionError
 from yt_dbl.pipeline.transcribe import (
     SEGMENTS_FILE,
     TranscribeStep,
+    _normalise_one_segment,
     _parse_timestamp,
     _recover_partial_json,
     _reference_score,
@@ -207,6 +208,52 @@ class TestNormaliseASRSegments:
         result = _fake_asr_result([{"start": 0.0, "end": 1.0, "speaker_id": "2", "text": "Hi"}])
         segs = TranscribeStep._normalise_asr_segments(result)
         assert segs[0]["speaker_id"] == 2
+
+
+# ── _normalise_one_segment unit tests ────────────────────────────────────────
+
+
+class TestNormaliseOneSegment:
+    """Direct tests for the _normalise_one_segment helper."""
+
+    def test_valid_segment(self) -> None:
+        seg = {"start": 0.0, "end": 5.0, "speaker_id": 0, "text": "Hello"}
+        result = _normalise_one_segment(seg)
+        assert result is not None
+        assert result["start"] == 0.0
+        assert result["end"] == 5.0
+        assert result["text"] == "Hello"
+
+    def test_end_less_than_start_returns_none(self) -> None:
+        """Segments where end < start (negative duration) are rejected."""
+        seg = {"start": 5.0, "end": 3.0, "speaker_id": 0, "text": "Reversed"}
+        assert _normalise_one_segment(seg) is None
+
+    def test_end_equals_start_returns_none(self) -> None:
+        """Segments where end == start (zero duration) are rejected."""
+        seg = {"start": 2.0, "end": 2.0, "speaker_id": 0, "text": "Zero"}
+        assert _normalise_one_segment(seg) is None
+
+    def test_negative_duration_filtered_from_batch(self) -> None:
+        """_normalise_asr_segments drops negative-duration entries."""
+        result = _fake_asr_result(
+            [
+                {"start": 0.0, "end": 2.0, "speaker_id": 0, "text": "Good"},
+                {"start": 5.0, "end": 3.0, "speaker_id": 0, "text": "Bad"},
+                {"start": 6.0, "end": 6.0, "speaker_id": 0, "text": "Zero"},
+            ]
+        )
+        segs = TranscribeStep._normalise_asr_segments(result)
+        assert len(segs) == 1
+        assert segs[0]["text"] == "Good"
+
+    def test_missing_start_returns_none(self) -> None:
+        seg = {"end": 5.0, "speaker_id": 0, "text": "No start"}
+        assert _normalise_one_segment(seg) is None
+
+    def test_missing_text_returns_none(self) -> None:
+        seg = {"start": 0.0, "end": 5.0, "speaker_id": 0}
+        assert _normalise_one_segment(seg) is None
 
 
 # ── Alignment tests ─────────────────────────────────────────────────────────

@@ -113,6 +113,8 @@ def _normalise_one_segment(seg: dict[str, Any]) -> dict[str, Any] | None:
     text_val = _first_key(seg, _TEXT_KEYS)
     if start is None or end is None or text_val is None:
         return None
+    if end <= start:
+        return None
 
     speaker_id = _first_key(seg, _SPEAKER_KEYS, cast=int)
     return {
@@ -497,6 +499,7 @@ class TranscribeStep(PipelineStep):
 
         chunk_audio_path = self.step_dir / f"_asr_chunk_{chunk_idx:03d}.wav"
         sf.write(str(chunk_audio_path), audio_data, sr)
+        del audio_data  # Free chunk buffer (~345 MB at 48 kHz × 30 min)
 
         try:
             raw = self._run_asr_single(model, chunk_audio_path)

@@ -213,8 +213,8 @@ def postprocess_segment(
         check=False,
     )
 
-    # Fallback: if combined filter failed, try without deess
-    if not output_path.exists():
+    # Fallback: if combined filter failed or produced empty file, try without deess
+    if not output_path.exists() or output_path.stat().st_size == 0:
         fb_filter = f"{speed_prefix}{loudnorm}"
         run_ffmpeg(
             ["-i", str(apply_input), "-filter:a", fb_filter, "-ar", "48000", str(output_path)],

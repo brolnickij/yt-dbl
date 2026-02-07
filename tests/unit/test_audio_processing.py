@@ -201,6 +201,47 @@ class TestPostprocessSegment:
             temp_sped = tmp_path / "_sped_raw.wav"
             assert not temp_sped.exists()
 
+    def test_empty_output_triggers_fallback(self, tmp_path: Path) -> None:
+        """When pass 2 creates a 0-byte file, fallback should re-run without deess."""
+        src = tmp_path / "raw.wav"
+        dst = tmp_path / "out.wav"
+        src.write_bytes(b"fake")
+
+        call_count = 0
+
+        def _empty_then_ok(*args, **kwargs):  # type: ignore[no-untyped-def]
+            nonlocal call_count
+            call_count += 1
+            cmd_args = args[0] if args else kwargs.get("args", [])
+            if cmd_args and "/dev/null" not in cmd_args:
+                from pathlib import Path as _Path
+
+                candidate = cmd_args[-1]
+                if not candidate.startswith("-"):
+                    _Path(candidate).parent.mkdir(parents=True, exist_ok=True)
+                    if call_count == 2:
+                        # Pass 2: create EMPTY file (0 bytes) → should trigger fallback
+                        _Path(candidate).write_bytes(b"")
+                    else:
+                        # Pass 3 (fallback): create proper output
+                        _Path(candidate).write_bytes(b"fallback-ok")
+            return _fake_measure_result()
+
+        with patch(
+            "yt_dbl.utils.audio_processing.run_ffmpeg",
+            side_effect=_empty_then_ok,
+        ) as mock_ff:
+            postprocess_segment(src, dst)
+            assert mock_ff.call_count == 3  # measure + empty + fallback
+            assert dst.exists()
+            assert dst.stat().st_size > 0
+            # Fallback should not contain deess filters
+            fallback_args = mock_ff.call_args_list[2][0][0]
+            filter_str = " ".join(fallback_args)
+            assert "loudnorm" in filter_str
+            assert "highshelf" not in filter_str
+            assert "compand" not in filter_str
+
     def test_deess_failure_falls_back_to_loudnorm_only(self, tmp_path: Path) -> None:
         """When combined loudnorm+deess fails, falls back to loudnorm only."""
         src = tmp_path / "raw.wav"
