@@ -58,6 +58,9 @@ class SynthesizeStep(PipelineStep):
     name = StepName.SYNTHESIZE
     description = "Synthesize speech (Qwen3-TTS voice cloning)"
 
+    # Flush MLX Metal cache every N synthesised segments to bound memory.
+    _METAL_CACHE_FLUSH_INTERVAL: int = 25
+
     # ── validation ──────────────────────────────────────────────────────────
 
     def validate_inputs(self, state: PipelineState) -> None:
@@ -159,6 +162,7 @@ class SynthesizeStep(PipelineStep):
 
         failed: list[tuple[int, str]] = []
         progress = create_progress()
+        synth_count = 0
         try:
             with progress:
                 task = progress.add_task("  Synthesizing TTS", total=total)
@@ -178,6 +182,7 @@ class SynthesizeStep(PipelineStep):
                         try:
                             audio = self._run_tts(model, text, ref_path, ref_text, lang)
                             self._save_wav(audio, raw_path, self.settings.tts_sample_rate)
+                            del audio  # Free MLX array immediately
                             seg.synth_path = raw_path.name
                             last_err = None
                             break
@@ -195,6 +200,12 @@ class SynthesizeStep(PipelineStep):
                             f"TTS permanently failed for segment {seg.id} "
                             f"after {max_attempts} attempts: {last_err}"
                         )
+                    else:
+                        synth_count += 1
+                        if synth_count % self._METAL_CACHE_FLUSH_INTERVAL == 0:
+                            from yt_dbl.utils.memory import cleanup_gpu_memory
+
+                            cleanup_gpu_memory()
 
                     progress.advance(task)
         finally:

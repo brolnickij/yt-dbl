@@ -611,6 +611,48 @@ class TestSynthesizeStepRun:
         # 3 segments × 1 attempt each (no retries)
         assert call_count == 3
 
+    def test_metal_cache_flushed_periodically(self, tmp_path: Path) -> None:
+        """cleanup_gpu_memory is called every _METAL_CACHE_FLUSH_INTERVAL segments."""
+        step, _, state = _make_step(tmp_path)
+        # Lower interval for testing (default is 25)
+        step._METAL_CACHE_FLUSH_INTERVAL = 2
+
+        mock_model = MagicMock()
+
+        with (
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._load_tts_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._run_tts",
+                _fake_run_tts,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.SynthesizeStep._save_wav",
+                _fake_save_wav,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.extract_voice_reference",
+                side_effect=lambda *a, **kw: Path(a[2]).write_bytes(b"fake-ref") or a[2],
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.postprocess_segment",
+                side_effect=_fake_postprocess,
+            ),
+            patch(
+                "yt_dbl.pipeline.synthesize.get_audio_duration",
+                return_value=1.0,
+            ),
+            patch(
+                "yt_dbl.utils.memory.cleanup_gpu_memory",
+            ) as mock_cleanup,
+        ):
+            step.run(state)
+
+        # 3 segments, interval=2: cleanup at synth_count=2 → 1 call
+        assert mock_cleanup.call_count == 1
+
 
 # ── Config tests ────────────────────────────────────────────────────────────
 
