@@ -153,7 +153,7 @@ Every step extends `PipelineStep` (ABC) and implements:
 3. `validate_inputs(state)` — pre-flight checks, raises `StepValidationError`
 4. `run(state) -> PipelineState` — main logic, must be idempotent
 
-Steps receive `Settings`, a `work_dir` (Path), and an optional `ModelManager`.
+Steps receive `Settings`, a `step_dir` (Path), and an optional `ModelManager`.
 
 ### State & checkpointing
 
