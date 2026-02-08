@@ -1,6 +1,52 @@
 # CHANGELOG
 
 
+## v1.8.0 (2026-02-08)
+
+### Bug Fixes
+
+- **audio**: Clean up rubberband temp file on postprocess error
+  ([`d382439`](https://github.com/brolnickij/yt-dbl/commit/d38243959c462febaff741f6b556e52877828b69))
+
+- **manager**: Reject max_loaded < 1 to prevent infinite eviction loop
+  ([`eb7811a`](https://github.com/brolnickij/yt-dbl/commit/eb7811a73a8f8703f2e7bb17de456817843c6532))
+
+- **synthesize**: Include _sped_* temp files in cache invalidation
+  ([`784a025`](https://github.com/brolnickij/yt-dbl/commit/784a02545b7eea77ee6a5c0955b99c2157eea03e))
+
+- **synthesize**: Set speaker.reference_path for cached voice refs
+  ([`c0a593e`](https://github.com/brolnickij/yt-dbl/commit/c0a593eb48fe985eaae1efba3a28e2133dda6733))
+
+- **test**: Mock huggingface_hub via sys.modules for CI without the package
+  ([`1b11667`](https://github.com/brolnickij/yt-dbl/commit/1b116673f08091bbc7d1352f4f64e2a39da651dd))
+
+- **translate**: Collect parallel batch errors instead of failing fast
+  ([`74cd1fe`](https://github.com/brolnickij/yt-dbl/commit/74cd1fee39f6fde37ca072dcbb5bcb9c492970a1))
+
+### Chores
+
+- Bump uv.lock
+  ([`ca527ed`](https://github.com/brolnickij/yt-dbl/commit/ca527edf8fcdd6f8380f6da8ae333a5997818b4a))
+
+### Documentation
+
+- **logging**: Fix get_rss_mb docstring to say peak RSS
+  ([`97838a3`](https://github.com/brolnickij/yt-dbl/commit/97838a38fb6d52e91179ca61fbd6a10cfdf0e8a6))
+
+### Features
+
+- **registry**: Thread hf_token to download_model
+  ([`875c727`](https://github.com/brolnickij/yt-dbl/commit/875c7276718786700f649e29fae2b39ef38f7e28))
+
+- **transcribe**: Extend _detect_language with 9 more Unicode scripts
+  ([`78d4468`](https://github.com/brolnickij/yt-dbl/commit/78d4468fcd1740a4086f3a0da33248099894c6cb))
+
+### Refactoring
+
+- **translate**: Type Anthropic client instead of Any
+  ([`2e620ba`](https://github.com/brolnickij/yt-dbl/commit/2e620ba9f94fb7bfa5b2ffa813a1c6178366b76d))
+
+
 ## v1.7.1 (2026-02-08)
 
 ### Bug Fixes
