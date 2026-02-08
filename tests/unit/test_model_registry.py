@@ -131,18 +131,28 @@ class TestHFCacheDir:
 class TestDownloadModel:
     def test_passes_token(self) -> None:
         """download_model forwards token to snapshot_download."""
-        from unittest.mock import patch
+        from types import ModuleType
+        from unittest.mock import MagicMock, patch
 
-        with patch("huggingface_hub.snapshot_download", return_value="ok") as mock_dl:
+        mock_dl = MagicMock(return_value="ok")
+        fake_hf = ModuleType("huggingface_hub")
+        fake_hf.snapshot_download = mock_dl  # type: ignore[attr-defined]
+
+        with patch.dict("sys.modules", {"huggingface_hub": fake_hf}):
             download_model("org/model", token="hf_secret")
 
         mock_dl.assert_called_once_with("org/model", token="hf_secret")
 
     def test_empty_token_passes_none(self) -> None:
         """Empty token string is converted to None for snapshot_download."""
-        from unittest.mock import patch
+        from types import ModuleType
+        from unittest.mock import MagicMock, patch
 
-        with patch("huggingface_hub.snapshot_download", return_value="ok") as mock_dl:
+        mock_dl = MagicMock(return_value="ok")
+        fake_hf = ModuleType("huggingface_hub")
+        fake_hf.snapshot_download = mock_dl  # type: ignore[attr-defined]
+
+        with patch.dict("sys.modules", {"huggingface_hub": fake_hf}):
             download_model("org/model")
 
         mock_dl.assert_called_once_with("org/model", token=None)
