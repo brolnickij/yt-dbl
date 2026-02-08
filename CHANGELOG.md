@@ -1,6 +1,44 @@
 # CHANGELOG
 
 
+## v1.7.1 (2026-02-08)
+
+### Bug Fixes
+
+- **runner**: Re-raise StepValidationError from _run_step for consistency
+  ([`73ce99c`](https://github.com/brolnickij/yt-dbl/commit/73ce99cf81d253735c8da2dfbe38988938402661))
+
+### Build System
+
+- Align mypy and ruff target to python 3.12
+  ([`3260d3b`](https://github.com/brolnickij/yt-dbl/commit/3260d3b75dc19dc09520bd1bb588aabb34072bfb))
+
+### Documentation
+
+- Cleanup
+  ([`b22d2a1`](https://github.com/brolnickij/yt-dbl/commit/b22d2a137646cf300b437962188100445e8206e4))
+
+- Fix SEPARATE backend and TRANSLATE batching description in README
+  ([`2e49cd5`](https://github.com/brolnickij/yt-dbl/commit/2e49cd5716b659eaa7b4f46ed95c8b44e17b1da8))
+
+- Update AGENTS.md to reflect step_dir rename
+  ([`a20ff68`](https://github.com/brolnickij/yt-dbl/commit/a20ff68c8637527c7a9a4f4c1c91d2b45171d1ea))
+
+### Refactoring
+
+- **base**: Make _get_or_load_model generic with TypeVar
+  ([`847061b`](https://github.com/brolnickij/yt-dbl/commit/847061beede07f4cac12e7628f985c47f3d52fb5))
+
+- **base**: Rename work_dir parameter to step_dir in PipelineStep
+  ([`9a522c5`](https://github.com/brolnickij/yt-dbl/commit/9a522c5e09fa6346493d87d190afbb6a32397eac))
+
+- **runner**: Extract _resolve_steps_to_run from run method
+  ([`4f060fe`](https://github.com/brolnickij/yt-dbl/commit/4f060fee843c6865377b53b4bc17b6be57b9aef0))
+
+- **transcribe**: Type _normalise_asr_segments with STTResult protocol
+  ([`3465fda`](https://github.com/brolnickij/yt-dbl/commit/3465fdae044a58c8409be12b65487f74c8f64cd0))
+
+
 ## v1.7.0 (2026-02-07)
 
 ### Bug Fixes
