@@ -214,6 +214,17 @@ class PipelineRunner:
 
             log_step_done(step_name, elapsed)
 
+        except StepValidationError as exc:
+            # Validation errors are fatal: persist state and re-raise so the
+            # caller sees the same exception type as the early validation in
+            # ``run()`` — instead of silently swallowing it as a generic FAILED.
+            result.status = StepStatus.FAILED
+            result.finished_at = datetime.now(UTC).isoformat()
+            result.error = str(exc)
+            log_step_fail(step_name, str(exc))
+            save_state(state, self.settings)
+            raise
+
         except Exception as exc:
             result.status = StepStatus.FAILED
             result.finished_at = datetime.now(UTC).isoformat()

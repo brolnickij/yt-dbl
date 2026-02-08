@@ -388,13 +388,45 @@ class TestEarlyValidation:
         cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="")
         state = PipelineState(video_id="test123", url="https://example.com")
         state = prefill_download(state, cfg)
-        state.get_step(StepName.TRANSLATE).status = StepStatus.COMPLETED
+        # Mark all language-dependent steps as completed so they are skipped
+        # and their validate_inputs() is never invoked.
+        for step_name in (StepName.TRANSLATE, StepName.SYNTHESIZE, StepName.ASSEMBLE):
+            state.get_step(step_name).status = StepStatus.COMPLETED
 
         sep_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
         runner = PipelineRunner(cfg)
         with _pipeline_patches(sep_dir):
             state = runner.run(state)
         # Pipeline should run without raising
+
+    def test_step_validation_error_propagates(self, tmp_path: Path) -> None:
+        """StepValidationError raised inside _run_step propagates to the caller.
+
+        Previously, all exceptions (including StepValidationError) were caught
+        generically and swallowed.  Now validation errors are re-raised after
+        persisting state so the caller sees the same exception type as the
+        early validation in ``run()``.
+        """
+        cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test")
+        state = PipelineState(video_id="test123", url="https://example.com")
+        state = prefill_download(state, cfg)
+
+        runner = PipelineRunner(cfg)
+
+        with (
+            patch(
+                "yt_dbl.pipeline.separate.SeparateStep.validate_inputs",
+                side_effect=StepValidationError("missing vocals"),
+            ),
+            pytest.raises(StepValidationError, match="missing vocals"),
+        ):
+            runner.run(state)
+
+        # State should still be persisted as FAILED
+        loaded = load_state(cfg, "test123")
+        assert loaded is not None
+        assert loaded.get_step(StepName.SEPARATE).status == StepStatus.FAILED
+        assert "missing vocals" in loaded.get_step(StepName.SEPARATE).error
 
 
 class TestModelCleanup:
