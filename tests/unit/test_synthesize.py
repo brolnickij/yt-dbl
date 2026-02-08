@@ -296,13 +296,21 @@ class TestPersistence:
     def test_invalidate_caches_removes_stale_files(self, tmp_path: Path) -> None:
         """_invalidate_caches removes all synthesis intermediates."""
         step, _, _state = _make_step(tmp_path)
-        # Create stale artefacts
-        for name in ("raw_0000.wav", "segment_0000.wav", "sped_0000.wav", SYNTH_META_FILE):
+        # Create stale artefacts (including _sped_* temp files from postprocessing)
+        for name in (
+            "raw_0000.wav",
+            "segment_0000.wav",
+            "sped_0000.wav",
+            "_sped_raw_0000.wav",
+            SYNTH_META_FILE,
+        ):
             (step.step_dir / name).write_text("x")
 
         step._invalidate_caches()
 
         assert not list(step.step_dir.glob("raw_*.wav"))
+        assert not list(step.step_dir.glob("sped_*.wav"))
+        assert not list(step.step_dir.glob("_sped_*.wav"))
         assert not list(step.step_dir.glob("segment_*.wav"))
         assert not (step.step_dir / SYNTH_META_FILE).exists()
 

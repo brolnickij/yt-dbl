@@ -367,7 +367,13 @@ class SynthesizeStep(PipelineStep):
         Without this, per-segment idempotency checks (``raw_path.exists()``)
         would silently reuse WAVs generated from outdated translations.
         """
-        for pattern in ("raw_*.wav", "sped_*.wav", "segment_*.wav", SYNTH_META_FILE):
+        for pattern in (
+            "raw_*.wav",
+            "sped_*.wav",
+            "_sped_*.wav",
+            "segment_*.wav",
+            SYNTH_META_FILE,
+        ):
             for path in self.step_dir.glob(pattern):
                 path.unlink()
 
