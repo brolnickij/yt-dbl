@@ -28,7 +28,7 @@ from yt_dbl.utils.logging import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from yt_dbl.models.protocols import AlignerModel, STTModel
+    from yt_dbl.models.protocols import AlignerModel, STTModel, STTResult
 
 SEGMENTS_FILE = "segments.json"
 
@@ -631,7 +631,7 @@ class TranscribeStep(PipelineStep):
         return mapping, gmax
 
     @staticmethod
-    def _normalise_asr_segments(result: Any) -> list[dict[str, Any]]:
+    def _normalise_asr_segments(result: STTResult) -> list[dict[str, Any]]:
         """Normalise VibeVoice output to a consistent format.
 
         Falls back to partial-JSON recovery when the structured
