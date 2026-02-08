@@ -836,6 +836,15 @@ class TranscribeStep(PipelineStep):
         arabic = sum(1 for c in all_text if "\u0600" <= c <= "\u06ff")
         devanagari = sum(1 for c in all_text if "\u0900" <= c <= "\u097f")
         thai = sum(1 for c in all_text if "\u0e00" <= c <= "\u0e7f")
+        hebrew = sum(1 for c in all_text if "\u0590" <= c <= "\u05ff")
+        greek = sum(1 for c in all_text if "\u0370" <= c <= "\u03ff")
+        georgian = sum(1 for c in all_text if "\u10a0" <= c <= "\u10ff")
+        bengali = sum(1 for c in all_text if "\u0980" <= c <= "\u09ff")
+        tamil = sum(1 for c in all_text if "\u0b80" <= c <= "\u0bff")
+        telugu = sum(1 for c in all_text if "\u0c00" <= c <= "\u0c7f")
+        gujarati = sum(1 for c in all_text if "\u0a80" <= c <= "\u0aff")
+        kannada = sum(1 for c in all_text if "\u0c80" <= c <= "\u0cff")
+        malayalam = sum(1 for c in all_text if "\u0d00" <= c <= "\u0d7f")
 
         # Build script→language mapping for detection
         script_counts: dict[str, int] = {
@@ -843,6 +852,15 @@ class TranscribeStep(PipelineStep):
             "ar": arabic,
             "hi": devanagari,
             "th": thai,
+            "he": hebrew,
+            "el": greek,
+            "ka": georgian,
+            "bn": bengali,
+            "ta": tamil,
+            "te": telugu,
+            "gu": gujarati,
+            "kn": kannada,
+            "ml": malayalam,
         }
         # Pick highest non-Latin script if it beats Latin
         best_script = max(script_counts, key=script_counts.get)  # type: ignore[arg-type]
