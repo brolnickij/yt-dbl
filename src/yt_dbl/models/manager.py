@@ -54,6 +54,8 @@ class ModelManager:
     """
 
     def __init__(self, max_loaded: int = 2) -> None:
+        if max_loaded < 1:
+            raise ValueError(f"max_loaded must be >= 1, got {max_loaded}")
         self.max_loaded = max_loaded
         self._models: OrderedDict[str, LoadedModel] = OrderedDict()
         self._loaders: dict[str, tuple[Callable[[], Any], Callable[[Any], None] | None]] = {}

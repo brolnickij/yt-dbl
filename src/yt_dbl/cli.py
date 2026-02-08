@@ -99,7 +99,7 @@ def dub(
         str | None, typer.Option("-t", "--target-language", help="Target language")
     ] = None,
     max_models: Annotated[
-        int | None, typer.Option("--max-models", help="Max models in memory")
+        int | None, typer.Option("--max-models", min=1, help="Max models in memory")
     ] = None,
     from_step: Annotated[
         str | None, typer.Option("--from-step", help="Start from this step")
@@ -169,7 +169,7 @@ def dub(
 def resume(
     video_id: Annotated[str, typer.Argument(help="Video ID to resume")],
     max_models: Annotated[
-        int | None, typer.Option("--max-models", help="Max models in memory")
+        int | None, typer.Option("--max-models", min=1, help="Max models in memory")
     ] = None,
     output_dir: _OutputDir = None,
 ) -> None:

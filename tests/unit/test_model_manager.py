@@ -117,3 +117,9 @@ class TestModelManager:
         """_cleanup_memory should not crash even without MLX/torch installed."""
         mgr = ModelManager(max_loaded=1)
         mgr._cleanup_memory()  # should not raise
+
+    @pytest.mark.parametrize("bad_value", [0, -1, -100])
+    def test_max_loaded_below_one_raises(self, bad_value: int) -> None:
+        """ModelManager rejects max_loaded < 1 to prevent infinite eviction."""
+        with pytest.raises(ValueError, match="max_loaded must be >= 1"):
+            ModelManager(max_loaded=bad_value)
