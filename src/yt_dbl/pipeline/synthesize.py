@@ -149,6 +149,7 @@ class SynthesizeStep(PipelineStep):
         for speaker in state.speakers:
             ref_path = self.step_dir / f"ref_{speaker.id}.wav"
             if ref_path.exists():
+                speaker.reference_path = ref_path.name
                 refs[speaker.id] = ref_path
             else:
                 to_extract.append(speaker)

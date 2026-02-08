@@ -167,6 +167,27 @@ class TestSynthesizeStepValidation:
         step.validate_inputs(state)  # should not raise
 
 
+# ── Extract references tests ────────────────────────────────────────────────
+
+
+class TestExtractReferences:
+    def test_cached_refs_set_reference_path(self, tmp_path: Path) -> None:
+        """When voice refs already exist on disk, speaker.reference_path is set."""
+        step, _cfg, state = _make_step(tmp_path)
+        vocals_path = step.resolve_step_file(state, StepName.SEPARATE, "vocals")
+
+        # Pre-create ref files for all speakers
+        for speaker in state.speakers:
+            ref_path = step.step_dir / f"ref_{speaker.id}.wav"
+            ref_path.write_bytes(b"fake-ref")
+
+        refs = step._extract_references(state, vocals_path)
+
+        assert len(refs) == 2
+        for speaker in state.speakers:
+            assert speaker.reference_path == f"ref_{speaker.id}.wav"
+
+
 # ── Voice reference text tests ──────────────────────────────────────────────
 
 
