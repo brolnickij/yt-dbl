@@ -20,6 +20,8 @@ from yt_dbl.utils.logging import log_info, log_warning
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from anthropic import Anthropic
+
 TRANSLATIONS_FILE = "translations.json"
 SUBTITLES_FILE = "subtitles.srt"
 
@@ -291,7 +293,7 @@ class TranslateStep(PipelineStep):
 
     def _translate_batch(
         self,
-        client: Any,
+        client: Anthropic,
         segments: list[Segment],
         target_language: str,
         source_language: str = "auto-detected",
