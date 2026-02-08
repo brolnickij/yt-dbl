@@ -20,7 +20,7 @@ class TestSeparateStepValidation:
     def _make(self, tmp_path: Path) -> tuple[SeparateStep, Settings, PipelineState]:
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
-        step = SeparateStep(settings=cfg, work_dir=step_dir)
+        step = SeparateStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://example.com")
         return step, cfg, state
 
@@ -54,7 +54,7 @@ class TestSeparateStepRun:
     def _setup(self, tmp_path: Path) -> tuple[SeparateStep, Settings, PipelineState]:
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
-        step = SeparateStep(settings=cfg, work_dir=step_dir)
+        step = SeparateStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://example.com")
         # Prefill download
         dl = state.get_step(StepName.DOWNLOAD)
@@ -143,7 +143,7 @@ class TestRenameOutputs:
     def _make_step(self, tmp_path: Path) -> SeparateStep:
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SEPARATE])
-        return SeparateStep(settings=cfg, work_dir=step_dir)
+        return SeparateStep(settings=cfg, step_dir=step_dir)
 
     def test_renames_standard_output_files(self, tmp_path: Path) -> None:
         step = self._make_step(tmp_path)

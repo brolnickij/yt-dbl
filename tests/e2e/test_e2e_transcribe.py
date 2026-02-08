@@ -49,11 +49,11 @@ def _download_and_separate(
     state = PipelineState(video_id=video_id, url=url)
 
     dl_dir = cfg.step_dir(video_id, STEP_DIRS[StepName.DOWNLOAD])
-    dl_step = DownloadStep(settings=cfg, work_dir=dl_dir)
+    dl_step = DownloadStep(settings=cfg, step_dir=dl_dir)
     state = dl_step.run(state)
 
     sep_dir = cfg.step_dir(video_id, STEP_DIRS[StepName.SEPARATE])
-    sep_step = SeparateStep(settings=cfg, work_dir=sep_dir)
+    sep_step = SeparateStep(settings=cfg, step_dir=sep_dir)
     state = sep_step.run(state)
 
     return cfg, state
@@ -69,7 +69,7 @@ class TestE2ETranscribe:
         cfg, state = _download_and_separate(e2e_work_dir)
 
         trans_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.TRANSCRIBE])
-        step = TranscribeStep(settings=cfg, work_dir=trans_dir)
+        step = TranscribeStep(settings=cfg, step_dir=trans_dir)
         state = step.run(state)
 
         # Step marked complete with outputs
@@ -106,7 +106,7 @@ class TestE2ETranscribe:
         cfg, state = _download_and_separate(e2e_work_dir)
 
         trans_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.TRANSCRIBE])
-        step = TranscribeStep(settings=cfg, work_dir=trans_dir)
+        step = TranscribeStep(settings=cfg, step_dir=trans_dir)
 
         # First run — real transcription
         state = step.run(state)

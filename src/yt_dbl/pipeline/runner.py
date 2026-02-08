@@ -197,7 +197,7 @@ class PipelineRunner:
         step_cls = STEP_CLASSES[step_name]
         step = step_cls(
             settings=self.settings,
-            work_dir=step_dir,
+            step_dir=step_dir,
             model_manager=self.model_manager,
         )
 

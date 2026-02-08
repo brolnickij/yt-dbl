@@ -40,7 +40,7 @@ class TestE2EDownload:
     ) -> tuple[DownloadStep, Settings, PipelineState]:
         cfg = Settings(work_dir=work_dir)
         step_dir = cfg.step_dir(video_id, STEP_DIRS[StepName.DOWNLOAD])
-        step = DownloadStep(settings=cfg, work_dir=step_dir)
+        step = DownloadStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id=video_id, url=url)
         return step, cfg, state
 

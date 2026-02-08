@@ -90,7 +90,7 @@ def _make_step(tmp_path: Path) -> tuple[AssembleStep, Settings, PipelineState]:
     """Create an AssembleStep with a fully prefilled PipelineState."""
     cfg = Settings(work_dir=tmp_path / "work")
     step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.ASSEMBLE])
-    step = AssembleStep(settings=cfg, work_dir=step_dir)
+    step = AssembleStep(settings=cfg, step_dir=step_dir)
 
     state = PipelineState(
         video_id="test123",
@@ -575,7 +575,7 @@ class TestAssembleStepRun:
         """Output file uses correct extension for mkv format."""
         cfg = Settings(work_dir=tmp_path / "work", output_format="mkv")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.ASSEMBLE])
-        step = AssembleStep(settings=cfg, work_dir=step_dir)
+        step = AssembleStep(settings=cfg, step_dir=step_dir)
 
         _, _, state = _make_step(tmp_path)
         # Recreate synth files in the new work_dir

@@ -65,7 +65,7 @@ def _make_segments() -> list[Segment]:
 def _make_step(tmp_path: Path) -> tuple[TranslateStep, Settings, PipelineState]:
     cfg = Settings(work_dir=tmp_path / "work", anthropic_api_key="sk-test-key")
     step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
-    step = TranslateStep(settings=cfg, work_dir=step_dir)
+    step = TranslateStep(settings=cfg, step_dir=step_dir)
     state = PipelineState(video_id="test123", url="https://example.com")
 
     # Prefill transcription
@@ -126,7 +126,7 @@ class TestTranslateStepValidation:
             anthropic_api_key="",
         )
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
-        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        step = TranslateStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id="test123")
         state.segments = _make_segments()
         with pytest.raises(StepValidationError, match="Anthropic API key"):
@@ -535,7 +535,7 @@ class TestBatchedTranslation:
             translation_batch_size=10,
         )
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
-        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        step = TranslateStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://example.com")
         state.segments = self._make_many_segments(25)
         trans = state.get_step(StepName.TRANSCRIBE)
@@ -591,7 +591,7 @@ class TestBatchCaching:
             translation_batch_size=10,
         )
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
-        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        step = TranslateStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://example.com")
         state.segments = self._make_many_segments(25)
         trans = state.get_step(StepName.TRANSCRIBE)
@@ -643,7 +643,7 @@ class TestBatchCaching:
             translation_batch_size=10,
         )
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
-        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        step = TranslateStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://example.com")
         state.segments = self._make_many_segments(25)
         trans = state.get_step(StepName.TRANSCRIBE)
@@ -765,7 +765,7 @@ class TestStaleCacheValidation:
             translation_batch_size=10,
         )
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
-        step = TranslateStep(settings=cfg, work_dir=step_dir)
+        step = TranslateStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://example.com")
         state.segments = [
             Segment(

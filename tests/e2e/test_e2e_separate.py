@@ -48,7 +48,7 @@ def _download_first(
     state = PipelineState(video_id=video_id, url=url)
 
     dl_dir = cfg.step_dir(video_id, STEP_DIRS[StepName.DOWNLOAD])
-    dl_step = DownloadStep(settings=cfg, work_dir=dl_dir)
+    dl_step = DownloadStep(settings=cfg, step_dir=dl_dir)
     state = dl_step.run(state)
     return cfg, state
 
@@ -62,7 +62,7 @@ class TestE2ESeparate:
         cfg, state = _download_first(e2e_work_dir)
 
         sep_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.SEPARATE])
-        step = SeparateStep(settings=cfg, work_dir=sep_dir)
+        step = SeparateStep(settings=cfg, step_dir=sep_dir)
         state = step.run(state)
 
         vocals_path = sep_dir / "vocals.wav"
@@ -84,7 +84,7 @@ class TestE2ESeparate:
         cfg, state = _download_first(e2e_work_dir)
 
         sep_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.SEPARATE])
-        step = SeparateStep(settings=cfg, work_dir=sep_dir)
+        step = SeparateStep(settings=cfg, step_dir=sep_dir)
         state = step.run(state)
 
         assert state.meta is not None
@@ -106,7 +106,7 @@ class TestE2ESeparate:
         cfg, state = _download_first(e2e_work_dir)
 
         sep_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.SEPARATE])
-        step = SeparateStep(settings=cfg, work_dir=sep_dir)
+        step = SeparateStep(settings=cfg, step_dir=sep_dir)
 
         # First run — real separation
         state = step.run(state)
@@ -128,7 +128,7 @@ class TestE2ESeparate:
         cfg, state = _download_first(e2e_work_dir)
 
         sep_dir = cfg.step_dir(SHORT_VIDEO_ID, STEP_DIRS[StepName.SEPARATE])
-        step = SeparateStep(settings=cfg, work_dir=sep_dir)
+        step = SeparateStep(settings=cfg, step_dir=sep_dir)
         step.run(state)
 
         wav_files = sorted(f.name for f in sep_dir.glob("*.wav"))

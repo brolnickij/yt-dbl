@@ -95,7 +95,7 @@ def _make_speakers() -> list[Speaker]:
 def _make_step(tmp_path: Path) -> tuple[SynthesizeStep, Settings, PipelineState]:
     cfg = Settings(work_dir=tmp_path / "work")
     step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.SYNTHESIZE])
-    step = SynthesizeStep(settings=cfg, work_dir=step_dir)
+    step = SynthesizeStep(settings=cfg, step_dir=step_dir)
 
     state = PipelineState(video_id="test123", url="https://example.com")
     state.segments = _make_segments()

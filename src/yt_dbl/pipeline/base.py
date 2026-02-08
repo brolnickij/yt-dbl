@@ -70,11 +70,11 @@ class PipelineStep(ABC):
     def __init__(
         self,
         settings: Settings,
-        work_dir: Path,
+        step_dir: Path,
         model_manager: ModelManager | None = None,
     ) -> None:
         self.settings = settings
-        self.work_dir = work_dir
+        self.step_dir = step_dir
         self.model_manager = model_manager
 
     @abstractmethod
@@ -84,7 +84,7 @@ class PipelineStep(ABC):
         Implementations should:
           1. Read inputs from state / previous step directories
           2. Process
-          3. Write outputs to self.work_dir
+          3. Write outputs to self.step_dir
           4. Update state with results (segments, speakers, etc.)
           5. Return state
         """
@@ -137,8 +137,3 @@ class PipelineStep(ABC):
     def _resolve_vocals(self, state: PipelineState) -> Path:
         """Resolve the vocals file produced by the separation step."""
         return self.resolve_step_file(state, StepName.SEPARATE, "vocals")
-
-    @property
-    def step_dir(self) -> Path:
-        """Convenience alias for the step working directory."""
-        return self.work_dir

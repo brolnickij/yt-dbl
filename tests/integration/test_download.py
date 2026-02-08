@@ -30,7 +30,7 @@ class TestDownloadStep:
     def _make_step(self, tmp_path: Path) -> tuple[DownloadStep, Settings, PipelineState]:
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
-        step = DownloadStep(settings=cfg, work_dir=step_dir)
+        step = DownloadStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(
             video_id="test123",
             url="https://youtube.com/watch?v=test123",
@@ -121,7 +121,7 @@ class TestFetchMetadata:
     def test_parses_json_output(self, tmp_path: Path) -> None:
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
-        step = DownloadStep(settings=cfg, work_dir=step_dir)
+        step = DownloadStep(settings=cfg, step_dir=step_dir)
 
         mock_result = subprocess.CompletedProcess(
             args=[], returncode=0, stdout=json.dumps(FAKE_META), stderr=""
@@ -136,7 +136,7 @@ class TestFetchMetadata:
     def test_raises_on_failure(self, tmp_path: Path) -> None:
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
-        step = DownloadStep(settings=cfg, work_dir=step_dir)
+        step = DownloadStep(settings=cfg, step_dir=step_dir)
 
         with (
             patch(
@@ -156,7 +156,7 @@ class TestDownloadVideo:
         mock_popen.side_effect = FileNotFoundError()
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
-        step = DownloadStep(settings=cfg, work_dir=step_dir)
+        step = DownloadStep(settings=cfg, step_dir=step_dir)
 
         with pytest.raises(DownloadError, match="yt-dlp not found"):
             step._download_video("https://youtube.com/watch?v=x", step_dir / "video.mp4")
@@ -170,7 +170,7 @@ class TestDownloadVideo:
 
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
-        step = DownloadStep(settings=cfg, work_dir=step_dir)
+        step = DownloadStep(settings=cfg, step_dir=step_dir)
 
         with pytest.raises(DownloadError, match="exited with code 1"):
             step._download_video("https://youtube.com/watch?v=x", step_dir / "video.mp4")
@@ -186,7 +186,7 @@ class TestDownloadVideo:
 
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
-        step = DownloadStep(settings=cfg, work_dir=step_dir)
+        step = DownloadStep(settings=cfg, step_dir=step_dir)
 
         with pytest.raises(RuntimeError, match="unexpected"):
             step._download_video("https://youtube.com/watch?v=x", step_dir / "video.mp4")
@@ -209,7 +209,7 @@ class TestDownloadStepOutputVerification:
     ) -> None:
         cfg = Settings(work_dir=tmp_path / "work")
         step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.DOWNLOAD])
-        step = DownloadStep(settings=cfg, work_dir=step_dir)
+        step = DownloadStep(settings=cfg, step_dir=step_dir)
         state = PipelineState(video_id="test123", url="https://youtube.com/watch?v=test123")
 
         mock_meta.return_value = FAKE_META

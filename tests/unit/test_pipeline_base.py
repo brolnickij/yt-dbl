@@ -37,7 +37,7 @@ class TestGetOrLoadModel:
 
         step = _DummyStep(
             settings=MagicMock(),
-            work_dir=tmp_path,  # type: ignore[arg-type]
+            step_dir=tmp_path,  # type: ignore[arg-type]
             model_manager=manager,
         )
         loader = MagicMock(return_value="direct-model")
@@ -57,7 +57,7 @@ class TestGetOrLoadModel:
 
         step = _DummyStep(
             settings=MagicMock(),
-            work_dir=tmp_path,
+            step_dir=tmp_path,
             model_manager=manager,
         )
 
@@ -71,7 +71,7 @@ class TestGetOrLoadModel:
         """Without a ModelManager, the loader is called directly."""
         step = _DummyStep(
             settings=MagicMock(),
-            work_dir=tmp_path,
+            step_dir=tmp_path,
             model_manager=None,
         )
         loader = MagicMock(return_value="direct-model")
@@ -85,7 +85,7 @@ class TestGetOrLoadModel:
         """Errors from the loader bubble up unchanged."""
         step = _DummyStep(
             settings=MagicMock(),
-            work_dir=tmp_path,
+            step_dir=tmp_path,
             model_manager=None,
         )
         loader = MagicMock(side_effect=RuntimeError("OOM"))
