@@ -109,7 +109,7 @@ class PipelineRunner:
         self.model_manager = ModelManager(max_loaded=settings.max_loaded_models)
         set_ffmpeg_path(settings.ffmpeg_path)
 
-    def run(  # noqa: PLR0912
+    def run(
         self,
         state: PipelineState,
         from_step: StepName | None = None,
@@ -133,30 +133,12 @@ class PipelineRunner:
                     "Anthropic API key required for translation — set YT_DBL_ANTHROPIC_API_KEY"
                 )
 
-        started = not from_step
+        steps_to_run = self._resolve_steps_to_run(state, from_step)
 
         try:
-            for step_name in STEP_ORDER:
-                # Skip until we reach from_step
-                if not started:
-                    if step_name == from_step:
-                        started = True
-                    else:
-                        result = state.get_step(step_name)
-                        if result.status == StepStatus.COMPLETED:
-                            log_step_skip(step_name)
-                            continue
-
-                # Skip already completed steps (when resuming without from_step)
-                if from_step is None:
-                    result = state.get_step(step_name)
-                    if result.status == StepStatus.COMPLETED:
-                        log_step_skip(step_name)
-                        continue
-
+            for step_name in steps_to_run:
                 state = self._run_step(step_name, state)
 
-                # Stop on failure
                 if state.get_step(step_name).status == StepStatus.FAILED:
                     log_info("Pipeline stopped due to failure. Use 'resume' to retry.")
                     break
@@ -176,6 +158,32 @@ class PipelineRunner:
             log_memory_status()
 
         return state
+
+    @staticmethod
+    def _resolve_steps_to_run(
+        state: PipelineState,
+        from_step: StepName | None,
+    ) -> list[StepName]:
+        """Determine which pipeline steps need to run, logging skipped ones."""
+        steps: list[StepName] = []
+        started = not from_step
+
+        for step_name in STEP_ORDER:
+            if not started:
+                if step_name == from_step:
+                    started = True
+                else:
+                    if state.get_step(step_name).status == StepStatus.COMPLETED:
+                        log_step_skip(step_name)
+                    continue
+
+            if from_step is None and state.get_step(step_name).status == StepStatus.COMPLETED:
+                log_step_skip(step_name)
+                continue
+
+            steps.append(step_name)
+
+        return steps
 
     def _run_step(self, step_name: StepName, state: PipelineState) -> PipelineState:
         """Run a single pipeline step with timing and checkpointing."""

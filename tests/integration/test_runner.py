@@ -429,6 +429,51 @@ class TestEarlyValidation:
         assert "missing vocals" in loaded.get_step(StepName.SEPARATE).error
 
 
+class TestResolveStepsToRun:
+    """Tests for _resolve_steps_to_run step-selection logic."""
+
+    def test_all_steps_when_fresh(self) -> None:
+        """All steps are returned for a fresh pipeline with no from_step."""
+        from yt_dbl.schemas import STEP_ORDER
+
+        state = PipelineState(video_id="v1")
+        result = PipelineRunner._resolve_steps_to_run(state, from_step=None)
+        assert result == list(STEP_ORDER)
+
+    def test_skips_completed_on_resume(self) -> None:
+        """Completed steps are skipped when resuming without from_step."""
+        state = PipelineState(video_id="v1")
+        state.get_step(StepName.DOWNLOAD).status = StepStatus.COMPLETED
+        state.get_step(StepName.SEPARATE).status = StepStatus.COMPLETED
+
+        result = PipelineRunner._resolve_steps_to_run(state, from_step=None)
+        assert StepName.DOWNLOAD not in result
+        assert StepName.SEPARATE not in result
+        assert StepName.TRANSCRIBE in result
+
+    def test_from_step_runs_target_and_later(self) -> None:
+        """from_step includes target step and all subsequent ones."""
+        state = PipelineState(video_id="v1")
+        state.get_step(StepName.DOWNLOAD).status = StepStatus.COMPLETED
+
+        result = PipelineRunner._resolve_steps_to_run(state, from_step=StepName.TRANSLATE)
+        assert result == [
+            StepName.TRANSLATE,
+            StepName.SYNTHESIZE,
+            StepName.ASSEMBLE,
+        ]
+
+    def test_from_step_forces_rerun_even_if_completed(self) -> None:
+        """--from-step re-runs a completed step."""
+        state = PipelineState(video_id="v1")
+        for sn in StepName:
+            state.get_step(sn).status = StepStatus.COMPLETED
+
+        result = PipelineRunner._resolve_steps_to_run(state, from_step=StepName.SYNTHESIZE)
+        assert StepName.SYNTHESIZE in result
+        assert StepName.ASSEMBLE in result
+
+
 class TestModelCleanup:
     def test_models_unloaded_on_keyboard_interrupt(self, tmp_path: Path) -> None:
         """Models are freed even if a step raises KeyboardInterrupt."""
