@@ -297,6 +297,8 @@ def models_download() -> None:
     """Pre-download all required ML models."""
     from yt_dbl.models.registry import MODEL_REGISTRY, check_model_downloaded, download_model
 
+    settings = Settings()
+
     for info in MODEL_REGISTRY:
         if check_model_downloaded(info.repo_id):
             console.print(f"  [green]✓[/green] {info.repo_id} — already downloaded")
@@ -304,7 +306,7 @@ def models_download() -> None:
 
         console.print(f"  [info]↓ Downloading {info.repo_id} ({info.approx_size})...[/info]")
         try:
-            download_model(info.repo_id)
+            download_model(info.repo_id, token=settings.hf_token)
             console.print(f"  [green]✓[/green] {info.repo_id}")
         except Exception as exc:
             console.print(f"  [error]✗ {info.repo_id}: {exc}[/error]")

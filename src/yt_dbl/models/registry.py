@@ -110,11 +110,14 @@ def check_separator_downloaded(cache_dir: Path | None = None) -> bool:
     return (cache_dir / SEPARATOR_MODEL).exists()
 
 
-def download_model(repo_id: str) -> None:
-    """Download a model from HuggingFace Hub."""
+def download_model(repo_id: str, *, token: str = "") -> None:
+    """Download a model from HuggingFace Hub.
+
+    *token* is an optional HuggingFace access token for gated repos.
+    """
     from huggingface_hub import snapshot_download  # noqa: PLC0415  # type: ignore[import-not-found]
 
-    snapshot_download(repo_id)
+    snapshot_download(repo_id, token=token or None)
 
 
 def format_model_size(size_bytes: int) -> str:

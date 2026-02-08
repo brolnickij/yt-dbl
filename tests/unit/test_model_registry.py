@@ -12,6 +12,7 @@ from yt_dbl.models.registry import (
     _repo_dir_name,
     check_model_downloaded,
     check_separator_downloaded,
+    download_model,
     format_model_size,
     get_model_size,
 )
@@ -125,3 +126,23 @@ class TestHFCacheDir:
         monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hub_cache"))
         result = _hf_cache_dir()
         assert result == tmp_path / "hub_cache"
+
+
+class TestDownloadModel:
+    def test_passes_token(self) -> None:
+        """download_model forwards token to snapshot_download."""
+        from unittest.mock import patch
+
+        with patch("huggingface_hub.snapshot_download", return_value="ok") as mock_dl:
+            download_model("org/model", token="hf_secret")
+
+        mock_dl.assert_called_once_with("org/model", token="hf_secret")
+
+    def test_empty_token_passes_none(self) -> None:
+        """Empty token string is converted to None for snapshot_download."""
+        from unittest.mock import patch
+
+        with patch("huggingface_hub.snapshot_download", return_value="ok") as mock_dl:
+            download_model("org/model")
+
+        mock_dl.assert_called_once_with("org/model", token=None)
