@@ -6,6 +6,8 @@ import subprocess
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import pytest
+
 from yt_dbl.schemas import Speaker
 from yt_dbl.utils.audio_processing import (
     extract_voice_reference,
@@ -259,8 +261,43 @@ class TestPostprocessSegment:
             assert "highshelf" not in filter_str
             assert "compand" not in filter_str
 
+    def test_rubberband_temp_cleaned_on_error(self, tmp_path: Path) -> None:
+        """Rubberband temp file is deleted even when loudnorm raises."""
+        src = tmp_path / "raw.wav"
+        dst = tmp_path / "out.wav"
+        src.write_bytes(b"fake")
+        temp_sped = tmp_path / "_sped_raw.wav"
+
+        call_count = 0
+
+        def _speed_ok_loudnorm_fail(*args, **kwargs):  # type: ignore[no-untyped-def]
+            nonlocal call_count
+            call_count += 1
+            cmd_args = args[0] if args else kwargs.get("args", [])
+            if call_count == 1:
+                # Speed-up step: create temp file
+                if cmd_args:
+                    from pathlib import Path as _Path
+
+                    _Path(cmd_args[-1]).write_bytes(b"sped")
+                return _ok_result()
+            # Loudnorm step: crash
+            raise RuntimeError("ffmpeg crashed")
+
+        with (
+            patch("yt_dbl.utils.audio_processing.has_rubberband", return_value=True),
+            patch(
+                "yt_dbl.utils.audio_processing.run_ffmpeg",
+                side_effect=_speed_ok_loudnorm_fail,
+            ),
+            pytest.raises(RuntimeError, match="ffmpeg crashed"),
+        ):
+            postprocess_segment(src, dst, speed_factor=1.5)
+
+        # Temp file must be cleaned up despite the error
+        assert not temp_sped.exists()
+
     def test_deess_failure_falls_back_to_loudnorm_only(self, tmp_path: Path) -> None:
-        """When combined loudnorm+deess fails, falls back to loudnorm only."""
         src = tmp_path / "raw.wav"
         dst = tmp_path / "out.wav"
         src.write_bytes(b"fake")

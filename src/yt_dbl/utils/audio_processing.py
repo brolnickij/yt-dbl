@@ -175,20 +175,21 @@ def postprocess_segment(
     loudnorm = f"loudnorm={_LOUDNORM_TARGET}"
     apply_filter = f"{speed_prefix}{loudnorm},{_DEESS_FILTER}"
     ar = str(output_sample_rate)
-    run_ffmpeg(
-        ["-i", str(apply_input), "-filter:a", apply_filter, "-ar", ar, str(output_path)],
-        check=False,
-    )
-
-    # Fallback: if combined filter failed or produced empty file, try without deess
-    if not output_path.exists() or output_path.stat().st_size == 0:
-        fb_filter = f"{speed_prefix}{loudnorm}"
+    try:
         run_ffmpeg(
-            ["-i", str(apply_input), "-filter:a", fb_filter, "-ar", ar, str(output_path)],
+            ["-i", str(apply_input), "-filter:a", apply_filter, "-ar", ar, str(output_path)],
+            check=False,
         )
 
-    # Clean up rubberband temp
-    if temp_sped is not None and temp_sped.exists():
-        temp_sped.unlink()
+        # Fallback: if combined filter failed or produced empty file, try without deess
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            fb_filter = f"{speed_prefix}{loudnorm}"
+            run_ffmpeg(
+                ["-i", str(apply_input), "-filter:a", fb_filter, "-ar", ar, str(output_path)],
+            )
+    finally:
+        # Clean up rubberband temp
+        if temp_sped is not None and temp_sped.exists():
+            temp_sped.unlink()
 
     return output_path
