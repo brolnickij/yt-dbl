@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from yt_dbl.schemas import PipelineState
 
 from yt_dbl.schemas import STEP_DIRS, StepName
+
+_T = TypeVar("_T")
 
 # ── Exception hierarchy ─────────────────────────────────────────────────────
 
@@ -112,8 +114,8 @@ class PipelineStep(ABC):
     def _get_or_load_model(
         self,
         name: str,
-        loader: Callable[[], Any],
-    ) -> Any:
+        loader: Callable[[], _T],
+    ) -> _T:
         """Load a model via *ModelManager* (with LRU eviction) or directly.
 
         When a ``model_manager`` is available the model is registered
@@ -121,11 +123,15 @@ class PipelineStep(ABC):
         eviction and memory tracking work automatically.  Otherwise the
         *loader* is called directly — the caller is responsible for
         freeing the returned object.
+
+        The method is generic: the return type matches the loader's return
+        type, preserving type information for callers that use typed
+        protocol loaders (e.g. ``Callable[[], TTSModel]``).
         """
         if self.model_manager is not None:
             if name not in self.model_manager.registered_names:
                 self.model_manager.register(name, loader=loader)
-            return self.model_manager.get(name)
+            return self.model_manager.get(name)  # type: ignore[no-any-return]
         return loader()
 
     def _resolve_vocals(self, state: PipelineState) -> Path:

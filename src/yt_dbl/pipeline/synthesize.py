@@ -375,7 +375,7 @@ class SynthesizeStep(PipelineStep):
     def _load_tts_model(self) -> TTSModel:
         """Load Qwen3-TTS model via mlx-audio (through ModelManager if available)."""
         model_name = self.settings.tts_model
-        return self._get_or_load_model(  # type: ignore[no-any-return]
+        return self._get_or_load_model(
             model_name,
             loader=lambda: self._load_tts_raw(model_name),
         )
