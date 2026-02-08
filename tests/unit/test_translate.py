@@ -811,6 +811,50 @@ class TestStaleCacheValidation:
         assert state.segments[0].translated_text == "Fresh 0"
         assert state.segments[15].translated_text == "Fresh 15"
 
+    def test_parallel_batch_error_collected(self, tmp_path: Path) -> None:
+        """Errors from parallel batches are collected into one TranslationError."""
+        cfg = Settings(
+            work_dir=tmp_path / "work",
+            anthropic_api_key="sk-test-key",
+            translation_batch_size=10,
+        )
+        step_dir = cfg.step_dir("test123", STEP_DIRS[StepName.TRANSLATE])
+        step = TranslateStep(settings=cfg, step_dir=step_dir)
+        segments = [
+            Segment(
+                id=i,
+                text=f"Segment {i}.",
+                start=float(i * 5),
+                end=float(i * 5 + 4),
+                speaker="SPEAKER_00",
+                language="en",
+            )
+            for i in range(20)
+        ]
+
+        call_count = 0
+
+        def make_stream_for_batch(
+            *, model: str, max_tokens: int, system: str, messages: list[dict[str, str]]
+        ) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            # First batch succeeds, second raises
+            user_msg = messages[0]["content"]
+            items = json.loads(user_msg)
+            if items[0]["id"] >= 10:
+                raise RuntimeError("API down")
+            translations = {item["id"]: f"OK {item['id']}" for item in items}
+            return _fake_claude_stream(translations)
+
+        with patch("anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.stream.side_effect = make_stream_for_batch
+            mock_cls.return_value = mock_client
+
+            with pytest.raises(TranslationError, match="1 translation batch"):
+                step._translate_all(segments, "ru", "en")
+
     def test_invalidate_caches_cleans_all_files(self, tmp_path: Path) -> None:
         """_invalidate_caches removes translations, subtitles, and batch caches."""
         step, _, state = _make_step(tmp_path)

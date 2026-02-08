@@ -267,9 +267,21 @@ class TranslateStep(PipelineStep):
             max_workers = min(len(uncached), 4)  # cap concurrent API calls
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 futures = {pool.submit(_do_batch, idx): idx for idx in uncached}
+                errors: list[tuple[int, Exception]] = []
                 for future in as_completed(futures):
-                    idx, batch_result = future.result()
-                    all_translations.update(batch_result)
+                    try:
+                        idx, batch_result = future.result()
+                        all_translations.update(batch_result)
+                    except Exception as exc:
+                        batch_idx = futures[future]
+                        errors.append((batch_idx, exc))
+                        log_warning(f"Batch {batch_idx + 1}/{n_batches} failed: {exc}")
+
+                if errors:
+                    failed = sorted(idx + 1 for idx, _ in errors)
+                    raise TranslationError(
+                        f"{len(errors)} translation batch(es) failed: {failed}"
+                    ) from errors[0][1]
 
         # Clean up all batch cache files after successful merge
         for path in self.step_dir.glob("_translate_batch_*.json"):
