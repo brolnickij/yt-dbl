@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 def get_rss_mb() -> float:
-    """Return current process RSS in megabytes."""
+    """Return peak process RSS in megabytes (ru_maxrss)."""
     try:
         import resource  # noqa: PLC0415
 
